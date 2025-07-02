@@ -10,8 +10,55 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 0) do
+ActiveRecord::Schema[7.2].define(version: 2025_07_01_143657) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
+  create_table "bill_supports", force: :cascade do |t|
+    t.bigint "bill_id", null: false
+    t.string "supportable_type", null: false
+    t.bigint "supportable_id", null: false
+    t.string "support_type"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["bill_id"], name: "index_bill_supports_on_bill_id"
+    t.index ["supportable_type", "supportable_id"], name: "index_bill_supports_on_supportable"
+  end
+
+  create_table "bills", force: :cascade do |t|
+    t.string "title"
+    t.string "kind"
+    t.string "discussion_status"
+    t.text "summary_text"
+    t.string "summary_link"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "session"
+    t.string "bill_number"
+  end
+
+  create_table "groups", force: :cascade do |t|
+    t.string "name"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "politician_groups", force: :cascade do |t|
+    t.bigint "politician_id", null: false
+    t.bigint "group_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_id"], name: "index_politician_groups_on_group_id"
+    t.index ["politician_id"], name: "index_politician_groups_on_politician_id"
+  end
+
+  create_table "politicians", force: :cascade do |t|
+    t.string "name"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  add_foreign_key "bill_supports", "bills"
+  add_foreign_key "politician_groups", "groups"
+  add_foreign_key "politician_groups", "politicians"
 end

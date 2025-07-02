@@ -1,0 +1,55 @@
+<h1 class="text-xl font-bold mb-4">議案検索</h1>
+
+<%= search_form_for @q, url: bills_path, method: :get, html: { class: "mb-6" } do |f| %>
+  <div class="mb-2">
+    <%= f.label :title_cont, "議案件名" %>
+    <%= f.search_field :title_cont, class: "border p-1" %>
+  </div>
+  <div class="mb-2">
+    <%= f.label :kind_eq, "種類" %>
+    <%= f.search_field :kind_eq, class: "border p-1" %>
+  </div>
+  <%= f.submit "検索", class: "bg-blue-500 text-white px-4 py-2 rounded" %>
+<% end %>
+
+<% if @bills.any? %>
+  <h2 class="text-lg font-semibold mt-4">検索結果</h2>
+  <% @bills.each do |bill| %>
+    <div class="border p-3 my-3">
+      <h3 class="text-lg font-bold"><%= bill.title %></h3>
+      <p><strong>提出回次:</strong> <%= bill.session %></p>
+      <p><strong>番号:</strong> <%= bill.bill_number %></p>
+      <p><strong>種類:</strong> <%= bill.kind %></p>
+      <p><strong>審議状況:</strong> <%= bill.discussion_status %></p>
+      <% if bill.summary_link.present? %>
+        <p>
+          <strong>要綱リンク:</strong>
+          <%= link_to "要綱を表示", bill.summary_link, target: "_blank", class: "text-blue-600 underline" %>
+        </p>
+      <% end %>
+      <% if bill.summary_text.present? %>
+        <p><strong>要綱概要:</strong></p>
+        <p class="whitespace-pre-wrap"><%= truncate(bill.summary_text, length: 300) %></p>
+      <% end %>
+
+      <% supports = bill.bill_supports.includes(:supportable) %>
+      <% groups = supports.select { |s| s.supportable_type == "Group" && s.support_type == "propose" } %>
+      <% proposers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "propose" } %>
+      <% agreeers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "propose_agree" } %>
+
+      <% if groups.any? %>
+        <p><strong>提出会派:</strong> <%= groups.map { |s| s.supportable.name }.join(", ") %></p>
+      <% end %>
+
+      <% if proposers.any? %>
+        <p><strong>提出者:</strong> <%= proposers.map { |s| s.supportable.name }.join(", ") %></p>
+      <% end %>
+
+      <% if agreeers.any? %>
+        <p><strong>賛成者:</strong> <%= agreeers.map { |s| s.supportable.name }.join(", ") %></p>
+      <% end %>
+    </div>
+  <% end %>
+<% elsif params[:q].present? %>
+  <p>検索結果はありません。</p>
+<% end %>
