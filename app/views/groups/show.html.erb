@@ -1,0 +1,28 @@
+<h1><%= @group.name %> の関連議案</h1>
+
+<% if @propose_bills.any? %>
+  <h2>提出会派として提出した議案</h2>
+  <ul>
+    <% @propose_bills.each do |bill| %>
+      <li><%= link_to bill.title, bill_path(bill) %></li>
+    <% end %>
+  </ul>
+<% end %>
+
+<% if @agree_bills.any? %>
+  <h2>審議時賛成会派として賛成した議案</h2>
+  <ul>
+    <% @agree_bills.each do |bill| %>
+      <li><%= link_to bill.title, bill_path(bill) %></li>
+    <% end %>
+  </ul>
+<% end %>
+
+<% if @desagree_bills.any? %>
+  <h2>審議時反対会派として反対した議案</h2>
+  <ul>
+    <% @desagree_bills.each do |bill| %>
+      <li><%= link_to bill.title, bill_path(bill) %></li>
+    <% end %>
+  </ul>
+<% end %>

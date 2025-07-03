@@ -1,4 +1,6 @@
 Rails.application.routes.draw do
+  get "politicians/show"
+  get "groups/show"
   get "bills/index"
   get "posts/index"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
@@ -15,6 +17,8 @@ Rails.application.routes.draw do
   # root "posts#index"
   Rails.application.routes.draw do
     root "bills#index"
-    resources :bills, only: [:index]
+    resources :bills, only: [:index, :show]
+    resources :groups, only: [:show]
+    resources :politicians, only: [:show]
   end
 end

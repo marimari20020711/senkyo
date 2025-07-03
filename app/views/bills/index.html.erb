@@ -33,19 +33,19 @@
       <% discussion_desagree_groups = supports.select { |s| s.supportable_type == "Group" && s.support_type == "desagree" } %>
 
       <% if groups.any? %>
-        <p><strong>提出会派:</strong> <%= groups.map { |s| s.supportable.name }.join(", ") %></p>
+        <p><strong>提出会派:</strong> <%= groups.map { |s|link_to s.supportable.name, group_path(s.supportable)}.join(", ").html_safe %></p>
       <% end %>
 
       <% if proposers.any? %>
-        <p><strong>提出者:</strong> <%= proposers.map { |s| s.supportable.name }.join(", ") %></p>
+         <p><strong>提出者:</strong><%= proposers.map { |s|link_to s.supportable.name, politician_path(s.supportable)}.join(", ").html_safe %></p>
       <% end %>
 
       <% if agreeers.any? %>
-        <p><strong>賛成者:</strong> <%= agreeers.map { |s| s.supportable.name }.join(", ") %></p>
+        <p><strong>賛成者:</strong><%= agreeers.map { |s|link_to s.supportable.name, politician_path(s.supportable)}.join(", ").html_safe %></p>
       <% end %>
 
       <% if discussion_agree_groups.any? %>
-        <p><strong>審議時賛成会派:</strong> <%= discussion_agree_groups.map { |s| s.supportable.name }.join(", ") %></p>
+        <p><strong>審議時賛成会派:</strong><%= discussion_agree_groups.map { |s|link_to s.supportable.name, group_path(s.supportable)}.join(", ").html_safe %></p>
       <% end %>
 
       <% if discussion_desagree_groups.any? %>

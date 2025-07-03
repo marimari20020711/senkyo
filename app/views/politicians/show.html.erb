@@ -1,0 +1,19 @@
+<h1><%= @politician.name %> の関連議案</h1>
+
+<% if @propose_bills.any? %>
+  <h2>提出者として提出した議案</h2>
+  <ul>
+    <% @propose_bills.each do |bill| %>
+      <li><%= link_to bill.title, bill_path(bill) %></li>
+    <% end %>
+  </ul>
+<% end %>
+
+<% if @propose_agree_bills.any? %>
+  <h2>提出賛成者として賛成した議案</h2>
+  <ul>
+    <% @propose_agree_bills.each do |bill| %>
+      <li><%= link_to bill.title, bill_path(bill) %></li>
+    <% end %>
+  </ul>
+<% end %>
