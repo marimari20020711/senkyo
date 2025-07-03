@@ -5,11 +5,6 @@
     <%= f.label :title_cont, "議案件名" %>
     <%= f.search_field :title_cont, class: "border p-1" %>
   </div>
-  <div class="mb-2">
-    <%= f.label :kind_eq, "種類" %>
-    <%= f.search_field :kind_eq, class: "border p-1" %>
-  </div>
-  <%= f.submit "検索", class: "bg-blue-500 text-white px-4 py-2 rounded" %>
 <% end %>
 
 <% if @bills.any? %>
@@ -17,8 +12,6 @@
   <% @bills.each do |bill| %>
     <div class="border p-3 my-3">
       <h3 class="text-lg font-bold"><%= bill.title %></h3>
-      <p><strong>提出回次:</strong> <%= bill.session %></p>
-      <p><strong>番号:</strong> <%= bill.bill_number %></p>
       <p><strong>種類:</strong> <%= bill.kind %></p>
       <p><strong>審議状況:</strong> <%= bill.discussion_status %></p>
       <% if bill.summary_link.present? %>
@@ -29,7 +22,7 @@
       <% end %>
       <% if bill.summary_text.present? %>
         <p><strong>要綱概要:</strong></p>
-        <p class="whitespace-pre-wrap"><%= truncate(bill.summary_text, length: 300) %></p>
+        <p class="whitespace-pre-wrap"><%= truncate(bill.summary_text, length: 500) %></p>
       <% end %>
 
       <% supports = bill.bill_supports.includes(:supportable) %>
