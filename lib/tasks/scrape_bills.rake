@@ -55,6 +55,8 @@ namespace :scrape do
         group_names = []
         proposer_names = []
         agreeer_names = []
+        discussion_agree_groups = []
+        discussion_disagree_groups = []
         summary_link = nil
         summary_text = nil
 
@@ -92,6 +94,8 @@ namespace :scrape do
           group_names = data["議案提出会派"].to_s.split(/、|,|;/).map(&:strip)
           proposer_names = data2["議案提出者一覧"].to_s.split(/、|,|;/).map{ |s| s.strip.sub(/君\z/, "") }
           agreeer_names = data2["議案提出の賛成者"].to_s.split(/、|,|;/).map{ |s| s.strip.sub(/君\z/, "") }
+          discussion_agree_groups = data["衆議院審議時賛成会派"].to_s.split(/、|,|;/).map(&:strip)
+          discussion_disagree_groups = data["衆議院審議時反対会派"].to_s.split(/、|,|;/).map(&:strip)
         end
 
         # 本文情報（要綱リンク）
@@ -103,34 +107,6 @@ namespace :scrape do
           youkou_link = body_doc.css("a").find { |a| a.text.include?("要綱") }
           if youkou_link
             summary_link = URI.join(body_url, youkou_link["href"]).to_s
-            # バイナリモードで読み込む
-            # summary_raw = URI.open(summary_link, "rb").read
-            # # 自分で変換する
-            # summary_html = summary_raw.encode("UTF-8", "Shift_JIS", invalid: :replace, undef: :replace, replace: "?")
-            # summary_doc = Nokogiri::HTML.parse(summary_html)
-
-            # # <H2 id="TopContents">を基準にする
-            # h2 = summary_doc.at_css("h2#TopContents")
-            # summary_text_parts = []
-            # if h2
-            #   node = h2.next
-            #   while node
-            #     if node.element?
-            #       break if node.name =~ /^h\d$/i
-            #       text = node.text.strip
-            #       summary_text_parts << text unless text.empty?
-            #     end
-            #     node = node.next
-            #   end
-            # end
-            # summary_text = summary_text_parts.join("\n\n")
-           
-
-            # id="TopContents"の部分を取得
-            
-            # summary_text = Nokogiri::HTML(URI.open(summary_link, "r:Shift_JIS:UTF-8")).css('#TopContents').to_html
-
-            # summary_text = Nokogiri::HTML(URI.open(summary_link, "r:Shift_JIS:UTF-8")).text.strip
             summary_doc = Nokogiri::HTML.parse(URI.open(summary_link, "r:Shift_JIS:UTF-8"))
             h2 = summary_doc.at_css("h2#TopContents")
             if h2
@@ -170,6 +146,18 @@ namespace :scrape do
           next if a_name.blank?
           politician = Politician.find_or_create_by(name: a_name)
           BillSupport.find_or_create_by(bill: bill, supportable: politician, support_type: "propose_agree")
+        end
+
+        discussion_agree_groups.each do |g_name|
+          next if g_name.blank?
+          group = Group.find_or_create_by(name: g_name)
+          BillSupport.find_or_create_by!(bill: bill,supportable: group,support_type: "agree")
+        end
+
+        discussion_disagree_groups.each do |g_name|
+          next if g_name.blank?
+          group = Group.find_or_create_by(name: g_name)
+          BillSupport.find_or_create_by!(bill: bill,supportable: group,support_type: "desagree")
         end
 
         puts "[#{kind}] Saved: #{session}-#{number}: #{title}"

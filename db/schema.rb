@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_07_01_143657) do
+ActiveRecord::Schema[7.2].define(version: 2025_07_03_023804) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -35,6 +35,12 @@ ActiveRecord::Schema[7.2].define(version: 2025_07_01_143657) do
     t.datetime "updated_at", null: false
     t.string "session"
     t.string "bill_number"
+    t.date "pre_received_date"
+    t.date "pre_refer_date"
+    t.string "pre_refer_committee"
+    t.date "received_date"
+    t.date "refer_date"
+    t.string "refer_committee"
   end
 
   create_table "groups", force: :cascade do |t|
