@@ -1,0 +1,6 @@
+<h1 class="text-2xl font-bold mb-4">会派検索結果</h1>
+<ul>
+  <% @groups.each do |group| %>
+    <li><%= link_to group.name, group_path(group) %></li>
+  <% end %>
+</ul>

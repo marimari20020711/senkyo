@@ -1,4 +1,9 @@
 class GroupsController < ApplicationController
+  def index
+    @q = Group.ransack(params[:q])
+    @groups = @q.result(distinct: true)
+  end
+  
   def show
     @group = Group.find(params[:id])
     @bill_supports = @group.bill_supports.includes(:bill)

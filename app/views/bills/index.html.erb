@@ -1,77 +1,13 @@
-<h1 class="text-2xl font-bold mb-6">議案検索</h1>
-
-<%= search_form_for @q, url: bills_path, method: :get, html: { class: "mb-6" } do |f| %>
-  <div class="mb-4">
-    <%= f.label :title_cont, "議案件名", class: "block text-sm font-medium text-gray-700" %>
-    <%= f.search_field :title_cont, class: "mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" %>
-  </div>
-  <div>
-    <%= f.submit "検索", class: "inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500" %>
-  </div>
-<% end %>
+<h1 class="text-2xl font-bold mb-6">議案検索結果一覧</h1>
 
 <% if @bills.any? %>
-  <h2 class="text-xl font-semibold mt-8 mb-4">検索結果</h2>
-  <div class="space-y-4">
+  <ul class="space-y-2">
     <% @bills.each do |bill| %>
-      <div class="border rounded-md p-4 shadow-sm bg-white">
-        <h3 class="text-lg font-bold mb-2"><%= bill.title %></h3>
-        <p><span class="font-semibold">種類:</span> <%= bill.kind %></p>
-        <p><span class="font-semibold">審議状況:</span> <%= bill.discussion_status %></p>
-
-        <% if bill.summary_link.present? %>
-          <p class="mt-2">
-            <span class="font-semibold">要綱リンク:</span>
-            <%= link_to "要綱を表示", bill.summary_link, target: "_blank", class: "text-blue-600 hover:underline" %>
-          </p>
-        <% end %>
-
-        <% if bill.summary_text.present? %>
-          <p class="mt-2 font-semibold">要綱概要:</p>
-          <p class="whitespace-pre-wrap text-sm text-gray-700"><%= truncate(bill.summary_text, length: 500) %></p>
-        <% end %>
-
-        <% supports = bill.bill_supports.includes(:supportable) %>
-        <% groups = supports.select { |s| s.supportable_type == "Group" && s.support_type == "propose" } %>
-        <% proposers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "propose" } %>
-        <% agreeers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "propose_agree" } %>
-        <% discussion_agree_groups = supports.select { |s| s.supportable_type == "Group" && s.support_type == "agree" } %>
-        <% discussion_desagree_groups = supports.select { |s| s.supportable_type == "Group" && s.support_type == "desagree" } %>
-
-        <div class="mt-3 space-y-1">
-          <% if groups.any? %>
-            <p><span class="font-semibold">提出会派:</span>
-              <%= groups.map { |s| link_to s.supportable.name, group_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
-            </p>
-          <% end %>
-
-          <% if proposers.any? %>
-            <p><span class="font-semibold">提出者:</span>
-              <%= proposers.map { |s| link_to s.supportable.name, politician_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
-            </p>
-          <% end %>
-
-          <% if agreeers.any? %>
-            <p><span class="font-semibold">賛成者:</span>
-              <%= agreeers.map { |s| link_to s.supportable.name, politician_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
-            </p>
-          <% end %>
-
-          <% if discussion_agree_groups.any? %>
-            <p><span class="font-semibold">審議時賛成会派:</span>
-              <%= discussion_agree_groups.map { |s| link_to s.supportable.name, group_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
-            </p>
-          <% end %>
-
-          <% if discussion_desagree_groups.any? %>
-            <p><span class="font-semibold">審議時反対会派:</span>
-              <%= discussion_desagree_groups.map { |s| link_to s.supportable.name, group_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
-            </p>
-          <% end %>
-        </div>
-      </div>
+      <li>
+        <%= link_to bill.title, bill_path(bill), class: "text-blue-600 hover:underline" %>
+      </li>
     <% end %>
-  </div>
-<% elsif params[:q].present? %>
-  <p class="text-gray-600 mt-4">検索結果はありません。</p>
+  </ul>
+<% else %>
+  <p>該当する議案はありません。</p>
 <% end %>

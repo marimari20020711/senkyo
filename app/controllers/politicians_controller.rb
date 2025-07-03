@@ -1,9 +1,20 @@
 class PoliticiansController < ApplicationController
+  def index
+    @q = Politician.ransack(params[:q])
+    @politicians = @q.result(distinct: true)
+  end
+
   def show
     @politician = Politician.find(params[:id])
-    @bill_supports = @politician.bill_supports.includes(:bill)
 
-    @propose_bills = @bill_supports.select { |s| s.support_type == "propose" }.map(&:bill)
-    @propose_agree_bills = @bill_supports.select { |s| s.support_type == "propose_agree" }.map(&:bill)
+    @propose_bills = @politician.bill_supports
+      .where(support_type: "propose")
+      .includes(:bill)
+      .map(&:bill)
+
+    @propose_agree_bills = @politician.bill_supports
+      .where(support_type: "propose_agree")
+      .includes(:bill)
+      .map(&:bill)
   end
 end
