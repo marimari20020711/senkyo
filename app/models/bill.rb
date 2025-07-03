@@ -3,7 +3,6 @@ class Bill < ApplicationRecord
 
   def self.ransackable_attributes(auth_object = nil)
     %w[
-      id
       title
       kind
       discussion_status

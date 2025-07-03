@@ -1,19 +1,25 @@
-<h1><%= @politician.name %> の関連議案</h1>
+<h1 class="text-2xl font-bold mb-4">
+  <%= @politician.name %> の関連議案
+</h1>
 
 <% if @propose_bills.any? %>
-  <h2>提出者として提出した議案</h2>
-  <ul>
+  <h2 class="text-xl font-semibold mt-6">提出者として提出した議案</h2>
+  <ul class="list-disc pl-6 space-y-1 mt-2">
     <% @propose_bills.each do |bill| %>
-      <li><%= link_to bill.title, bill_path(bill) %></li>
+      <li>
+        <%= link_to bill.title, bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+      </li>
     <% end %>
   </ul>
 <% end %>
 
 <% if @propose_agree_bills.any? %>
-  <h2>提出賛成者として賛成した議案</h2>
-  <ul>
+  <h2 class="text-xl font-semibold mt-6">提出賛成者として賛成した議案</h2>
+  <ul class="list-disc pl-6 space-y-1 mt-2">
     <% @propose_agree_bills.each do |bill| %>
-      <li><%= link_to bill.title, bill_path(bill) %></li>
+      <li>
+        <%= link_to bill.title, bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+      </li>
     <% end %>
   </ul>
 <% end %>
