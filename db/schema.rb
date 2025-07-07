@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_07_03_023804) do
+ActiveRecord::Schema[7.2].define(version: 2025_07_07_053517) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -41,6 +41,11 @@ ActiveRecord::Schema[7.2].define(version: 2025_07_03_023804) do
     t.date "received_date"
     t.date "refer_date"
     t.string "refer_committee"
+    t.text "ai_summary"
+    t.string "body_link"
+    t.text "body_text"
+    t.string "sangi_hp_body_link"
+    t.text "sangi_hp_body_text"
   end
 
   create_table "groups", force: :cascade do |t|

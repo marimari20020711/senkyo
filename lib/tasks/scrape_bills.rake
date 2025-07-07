@@ -1,11 +1,11 @@
 namespace :scrape do
   desc "Scrape bills (衆法・参法・閣法)"
-  task bills: :environment do
+  task shugiin_hp_bills: :environment do
     require "open-uri"
     require "nokogiri"
 
     base_url = "https://www.shugiin.go.jp/internet/itdb_gian.nsf/html/gian/menu.htm"
-
+    
     index_html = URI.open(base_url).read
     index_doc = Nokogiri::HTML.parse(index_html)
 
@@ -118,6 +118,23 @@ namespace :scrape do
               end
             end
           end
+          houan_link = body_doc.css("a").find { |a| a.text.include?("提出時法律案") }
+          if houan_link
+            body_link = URI.join(body_url, houan_link["href"]).to_s
+            houan_body_doc = Nokogiri::HTML.parse(URI.open(body_link, "r:Shift_JIS:UTF-8"))
+            h2 = houan_body_doc.at_css("h2#TopContents")
+            ps = h2.xpath("following-sibling::p")
+            body_text = ps.map(&:text).join("\n\n")
+
+            # if h2
+            #   body_text = ""
+            #   node = h2
+            #   while (node = node.next_element)
+            #     break if node.name =~ /^h\d$/i || node.name == "div"
+            #     body_text << node.text.strip + "\n\n"
+            #   end
+            # end
+          end
         end
 
         # 保存
@@ -128,6 +145,9 @@ namespace :scrape do
         bill.discussion_status = discussion_status
         bill.summary_link = summary_link
         bill.summary_text = summary_text
+        bill.body_link = body_link
+        bill.body_text = body_text
+
         bill.save!
 
         group_names.each do |g_name|
@@ -165,5 +185,75 @@ namespace :scrape do
     end
 
     puts "Scraping complete."
+  end
+
+    task sangiin_hp_bills: :environment do
+    require "open-uri"
+    require "nokogiri"
+    require "pdf-reader"
+
+    base_url = "https://www.sangiin.go.jp/japanese/joho1/kousei/gian/213/gian.htm"
+    base_uri = URI.parse(base_url)
+
+    html = URI.open(base_url).read
+    doc = Nokogiri::HTML.parse(html)
+
+    # 対象テーブルタイトルとkindの対応
+    target_titles = {
+      "法律案（内閣提出）一覧" => "閣法",
+      "法律案（衆法）一覧" => "衆法",
+      "法律案（参法）一覧" => "参法"
+    }
+
+    doc.css("h2.title_text").each do |h2|
+      title = h2.text.strip
+      next unless target_titles.key?(title)
+
+      kind = target_titles[title]
+
+      table = h2.xpath("following-sibling::table").first
+      unless table
+        puts "表が見つかりません: #{title}"
+        next
+      end
+
+      table.css("tr")[1..].each do |tr|
+        tds = tr.css("td")
+        next if tds.size < 5
+
+        session = tds[0]&.text&.strip
+        number = tds[1]&.text&.strip
+        title_text = tds[2]&.text&.strip
+
+        body_link_href = tds[4]&.at_css("a")&.[]("href")
+        if body_link_href.blank?
+          puts "提出法律案リンクなし: #{session}-#{number}-#{title_text}"
+          next
+        end
+
+        body_link = URI.join(base_uri, body_link_href).to_s
+
+        # PDFをダウンロード
+        pdf_io = URI.open(body_link)
+        reader = PDF::Reader.new(pdf_io)
+
+        pdf_text = ""
+        reader.pages.each { |page| pdf_text << page.text + "\n\n" }
+
+        # billsテーブルで検索 (kindを条件に追加)
+        bill = Bill.find_by(session: session, bill_number: number, kind: kind)
+
+        if bill
+          bill.sangi_hp_body_link = body_link
+          bill.sangi_hp_body_text = pdf_text
+          bill.save!
+          puts "保存しました: #{session}-#{number}-#{title_text} (kind: #{kind})"
+        else
+          puts "一致するbillが見つかりません: #{session}-#{number}-#{title_text} (kind: #{kind})"
+        end
+      end
+    end
+
+    puts "スクレイピング完了"
   end
 end

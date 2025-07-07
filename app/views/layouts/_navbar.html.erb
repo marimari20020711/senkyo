@@ -1,6 +1,6 @@
-<nav class="bg-gray-800 p-4 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-  <div class="text-lg font-bold">
-    <%= link_to "トップ", root_path, class: "hover:underline" %>
+<nav class="bg-gray-800 p-4 text-white flex flex-col sm:flex-row sm:justify-between sm:items-start space-y-2 sm:space-y-0">
+  <div class="text-lg font-bold flex-shrink-1">
+    <%= link_to "top", root_path, class: "hover:underline" %>
   </div>
   <div class="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
     <%= search_form_for @bill_q, url: bills_path, method: :get, local: true do |f| %>
