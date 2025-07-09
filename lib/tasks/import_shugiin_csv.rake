@@ -1,11 +1,11 @@
 # lib/tasks/import_sangiin_csv.rake
 
 namespace :import do
-  desc "Import Sangiin politicians from CSV"
-  task sangiin_members: :environment do
+  desc "Import Shugiin politicians from CSV"
+  task shugiin_members: :environment do
     require 'csv'
 
-    path = Rails.root.join("lib/assets/sangiin_members.csv")
+    path = Rails.root.join("lib/assets/shugiin_members.csv")
     puts "CSV読み込み開始: #{path}"
 
     CSV.foreach(path, headers: true) do |row|
@@ -13,7 +13,7 @@ namespace :import do
       name_reading = row["読み方"].to_s.strip
       group_name   = row["会派"].to_s.strip
       district     = row["選挙区"].to_s.strip
-      term_end     = row["任期満了"].to_s.strip
+      winning_count = row["当選回数"].to_s.strip
 
       # 本名（[小川 のり子] 形式）を抽出
       real_name = name_raw[/\[(.*?)\]/, 1]
@@ -21,9 +21,9 @@ namespace :import do
       normalized_name = name_only.gsub(/[[:space:]]/, "")
 
       simplified_group = case group_name
-                         when /立憲/ then "立憲民主・社民・無所属"
-                         when /民主/ then "国民民主党・新緑風会"
-                         when /自民/ then "自由民主党"
+                         when /立憲/ then "立憲民主党・無所属"
+                         when /国民/ then "国国民民主党・無所属クラブ"
+                         when /自民/ then "自由民主党・無所属の会"
                          when /公明/ then "公明党"
                          when /共産/ then "日本共産党"
                          when /維新/ then "日本維新の会"
@@ -40,15 +40,15 @@ namespace :import do
         name_reading: name_reading,
         real_name: real_name,
         district: district,
-        term_end: term_end,
-        name_of_house: "参議院"
+        winning_count: winning_count,
+        name_of_house: "衆議院"
       )
       politician.save!
 
       group = Group.find_or_create_by!(name: simplified_group)
       PoliticianGroup.find_or_create_by!(politician: politician, group: group)
 
-      puts "登録: #{normalized_name}（#{simplified_group}） 選挙区: #{district} 任期満了: #{term_end}"
+      puts "登録: #{normalized_name}（#{simplified_group}） 選挙区: #{district} 当選回数: #{winning_count}"
 
     end
 

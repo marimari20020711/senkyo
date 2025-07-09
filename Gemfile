@@ -60,4 +60,3 @@ end
 gem "tailwindcss-rails"
 gem "tailwindcss-ruby", "3.4.17"
 gem 'pdf-reader'
-gem 'mechanize'
