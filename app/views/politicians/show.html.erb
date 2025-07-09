@@ -1,4 +1,35 @@
 <h1 class="text-2xl font-bold mb-4">
+  <%= @politician.name %> のプロフィール
+</h1>
+
+<table class="table-auto border-collapse border border-gray-300">
+  <tbody>
+    <tr>
+      <th class="border border-gray-300 px-4 py-2 text-left">ふりがな</th>
+      <td class="border border-gray-300 px-4 py-2"><%= @politician.name_reading.presence || "未登録" %></td>
+    </tr>
+    <tr>
+      <th class="border border-gray-300 px-4 py-2 text-left">本名</th>
+      <td class="border border-gray-300 px-4 py-2"><%= @politician.real_name.presence || "同上" %></td>
+    </tr>
+    <tr>
+      <th class="border border-gray-300 px-4 py-2 text-left">選挙区</th>
+      <td class="border border-gray-300 px-4 py-2"><%= @politician.district.presence || "未登録" %></td>
+    </tr>
+    <tr>
+      <th class="border border-gray-300 px-4 py-2 text-left">任期満了</th>
+      <td class="border border-gray-300 px-4 py-2"><%= @politician.term_end.presence || "未登録" %></td>
+    </tr>
+    <tr>
+      <th class="border border-gray-300 px-4 py-2 text-left">所属院</th>
+      <td class="border border-gray-300 px-4 py-2"><%= @politician.name_of_house.presence || "未登録" %></td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="my-6">
+
+<h1 class="text-2xl font-bold mb-4">
   <%= @politician.name %> の関連議案
 </h1>
 

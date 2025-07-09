@@ -125,28 +125,19 @@ namespace :scrape do
             h2 = houan_body_doc.at_css("h2#TopContents")
             ps = h2.xpath("following-sibling::p")
             body_text = ps.map(&:text).join("\n\n")
-
-            # if h2
-            #   body_text = ""
-            #   node = h2
-            #   while (node = node.next_element)
-            #     break if node.name =~ /^h\d$/i || node.name == "div"
-            #     body_text << node.text.strip + "\n\n"
-            #   end
-            # end
           end
         end
 
         # 保存
         bill = Bill.find_or_initialize_by(title: title)
-        bill.kind = kind
-        bill.session = session
-        bill.bill_number = number
-        bill.discussion_status = discussion_status
-        bill.summary_link = summary_link
-        bill.summary_text = summary_text
-        bill.body_link = body_link
-        bill.body_text = body_text
+        bill.kind ||= kind
+        bill.session ||= session
+        bill.number ||= number
+        bill.discussion_status ||= discussion_status
+        bill.summary_link ||= summary_link
+        bill.summary_text ||= summary_text
+        bill.body_link ||= body_link
+        bill.body_text ||= body_text
 
         bill.save!
 
@@ -241,7 +232,7 @@ namespace :scrape do
         reader.pages.each { |page| pdf_text << page.text + "\n\n" }
 
         # billsテーブルで検索 (kindを条件に追加)
-        bill = Bill.find_by(session: session, bill_number: number, kind: kind)
+        bill = Bill.find_by(session: session, number: number, kind: kind)
 
         if bill
           bill.sangi_hp_body_link = body_link
