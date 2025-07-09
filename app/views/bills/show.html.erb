@@ -5,15 +5,15 @@
 
 <% if @bill.summary_link.present? %>
   <p class="mt-2">
-    <span class="font-semibold">要綱リンク:</span>
-    <%= link_to "要綱を表示", @bill.summary_link, target: "_blank", class: "text-blue-600 hover:underline" %>
+    <span class="font-semibold">本文リンク:</span>
+    <%= link_to "本文を表示", @bill.body_link, target: "_blank", class: "text-blue-600 hover:underline" %>
   </p>
 <% end %>
 
 <% if @bill.summary_text.present? %>
   <p class="mt-2 font-semibold">要綱概要:</p>
   <p class="whitespace-pre-wrap text-sm text-gray-700">
-    <%= truncate(@bill.summary_text, length: 500) %>
+    <%= truncate(@bill.summary_text, length: 3000) %>
   </p>
 <% end %>
 
@@ -48,3 +48,9 @@
     </p>
   <% end %>
 </div>
+
+<p class="text-xs text-gray-500 mt-6">
+  ※本ページに掲載している法案情報は、衆議院ホームページ
+  （<%= link_to "https://www.shugiin.go.jp/", "https://www.shugiin.go.jp/", target: "_blank", class: "underline" %>）
+  より取得・引用しています。
+</p>
