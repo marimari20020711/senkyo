@@ -34,3 +34,37 @@
     <% end %>
   </ul>
 <% end %>
+
+<%# 所属議員一覧 %>
+<% if @group.politicians.any? %>
+  <div class="bg-gray-50 p-4 rounded-lg shadow mt-10">
+    <h2 class="text-xl font-semibold mb-4">所属議員一覧</h2>
+
+    <% shugin_members = @group.politicians.select { |p| p.name_of_house == "衆議院" } %>
+    <% sangiin_members = @group.politicians.select { |p| p.name_of_house == "参議院" } %>
+
+    <% if shugin_members.any? %>
+      <h3 class="text-lg font-medium mt-4">衆議院議員</h3>
+      <ul class="list-disc pl-6 space-y-1 mt-1">
+        <% shugin_members.each do |p| %>
+          <li>
+            <%= link_to p.name, politician_path(p), class: "text-blue-600 hover:underline" %>
+            <% if p.district.present? %>（<%= p.district %>）<% end %>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <% if sangiin_members.any? %>
+      <h3 class="text-lg font-medium mt-4">参議院議員</h3>
+      <ul class="list-disc pl-6 space-y-1 mt-1">
+        <% sangiin_members.each do |p| %>
+          <li>
+            <%= link_to p.name, politician_path(p), class: "text-blue-600 hover:underline" %>
+            <% if p.district.present? %>（<%= p.district %>）<% end %>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+  </div>
+<% end %>

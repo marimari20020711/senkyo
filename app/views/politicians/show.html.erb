@@ -2,6 +2,42 @@
   <%= @politician.name %> の関連議案
 </h1>
 
+<!-- 議員プロフィール情報 -->
+<div class="bg-gray-50 p-4 rounded-lg shadow mb-6">
+  <h2 class="text-xl font-semibold mb-2">議員プロフィール</h2>
+  <ul class="space-y-1 text-gray-700">
+    <% if @politician.name_reading.present? %>
+      <li><strong>読み方:</strong> <%= @politician.name_reading %></li>
+    <% end %>
+
+    <% if @politician.real_name.present? %>
+      <li><strong>本名:</strong> <%= @politician.real_name %></li>
+    <% end %>
+
+    <% if @politician.name_of_house.present? %>
+      <li><strong>議院:</strong> <%= @politician.name_of_house %></li>
+    <% end %>
+
+    <% if @politician.groups.any? %>
+      <li><strong>会派:</strong>
+        <%= @politician.groups.map{ |g| link_to g.name, group_path(g), class: "text-blue-600 hover:underline" }.join("・").html_safe %>
+      </li>
+    <% end %>
+
+    <% if @politician.district.present? %>
+      <li><strong>選挙区:</strong> <%= @politician.district %></li>
+    <% end %>
+
+    <% if @politician.term_end.present? %>
+      <li><strong>任期満了:</strong> <%= l(@politician.term_end, format: :long) rescue @politician.term_end %></li>
+    <% end %>
+
+    <% if @politician.winning_count.present? %>
+      <li><strong>当選回数:</strong> <%= @politician.winning_count %> 回</li>
+    <% end %>
+  </ul>
+</div>
+
 <% if @propose_bills.any? %>
   <h2 class="text-xl font-semibold mt-6">提出者として提出した議案</h2>
   <ul class="list-disc pl-6 space-y-1 mt-2">

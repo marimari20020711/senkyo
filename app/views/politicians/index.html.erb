@@ -1,6 +1,6 @@
 <h1 class="text-2xl font-bold mb-4">議員検索結果</h1>
 <ul>
   <% @politicians.each do |politician| %>
-    <li><%= link_to politician.name, politician_path(politician) %></li>
+    <li><%= link_to politician.name, politician_path(politician), class: "text-blue-600 hover:underline" %></li>
   <% end %>
 </ul>
