@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_07_09_082550) do
+ActiveRecord::Schema[7.2].define(version: 2025_07_10_074237) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -34,7 +34,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_07_09_082550) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "session"
-    t.string "bill_number"
+    t.string "number"
     t.date "pre_received_date"
     t.date "pre_refer_date"
     t.string "pre_refer_committee"

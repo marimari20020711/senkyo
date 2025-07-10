@@ -1,9 +1,11 @@
 <h1 class="text-2xl font-bold mb-4"><%= @bill.title %></h1>
 
 <p><span class="font-semibold">種類:</span> <%= @bill.kind %></p>
+<p><span class="font-semibold">回次:</span> <%= @bill.session %></p>
+<p><span class="font-semibold">番号:</span> <%= @bill.number %></p>
 <p><span class="font-semibold">審議状況:</span> <%= @bill.discussion_status %></p>
 
-<% if @bill.summary_link.present? %>
+<% if @bill.body_link.present? %>
   <p class="mt-2">
     <span class="font-semibold">本文リンク:</span>
     <%= link_to "本文を表示", @bill.body_link, target: "_blank", class: "text-blue-600 hover:underline" %>
@@ -42,9 +44,21 @@
     </p>
   <% end %>
 
-  <% if @discussion_desagree_groups.any? %>
+  <% if @discussion_disagree_groups.any? %>
     <p><span class="font-semibold">審議時反対会派:</span>
-      <%= @discussion_desagree_groups.map { |s| link_to s.supportable.name, group_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
+      <%= @discussion_disagree_groups.map { |s| link_to s.supportable.name, group_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
+    </p>
+  <% end %>
+
+  <% if @vote_agreeers.any? %>
+    <p><span class="font-semibold">採決時賛成者:</span>
+      <%= @vote_agreeers.map { |s| link_to s.supportable.name, politician_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
+    </p>
+  <% end %>
+
+  <% if @vote_disagreeers.any? %>
+    <p><span class="font-semibold">採決時反対者:</span>
+      <%= @vote_disagreeers.map { |s| link_to s.supportable.name, politician_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
     </p>
   <% end %>
 </div>

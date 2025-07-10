@@ -17,6 +17,9 @@ class BillsController < ApplicationController
     @proposers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "propose" }
     @agreeers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "propose_agree" }
     @discussion_agree_groups = supports.select { |s| s.supportable_type == "Group" && s.support_type == "agree" }
-    @discussion_desagree_groups = supports.select { |s| s.supportable_type == "Group" && s.support_type == "desagree" }
+    @discussion_disagree_groups = supports.select { |s| s.supportable_type == "Group" && s.support_type == "disagree" }
+    @vote_agreeers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "agree" }
+    @vote_disagreeers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "disagree" }
+  
   end
 end

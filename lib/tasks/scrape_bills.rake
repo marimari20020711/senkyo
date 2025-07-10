@@ -125,15 +125,6 @@ namespace :scrape do
             h2 = houan_body_doc.at_css("h2#TopContents")
             ps = h2.xpath("following-sibling::p")
             body_text = ps.map(&:text).join("\n\n")
-
-            # if h2
-            #   body_text = ""
-            #   node = h2
-            #   while (node = node.next_element)
-            #     break if node.name =~ /^h\d$/i || node.name == "div"
-            #     body_text << node.text.strip + "\n\n"
-            #   end
-            # end
           end
         end
 
@@ -141,7 +132,7 @@ namespace :scrape do
         bill = Bill.find_or_initialize_by(title: title)
         bill.kind = kind
         bill.session = session
-        bill.bill_number = number
+        bill.number = number
         bill.discussion_status = discussion_status
         bill.summary_link = summary_link
         bill.summary_text = summary_text
@@ -177,7 +168,7 @@ namespace :scrape do
         discussion_disagree_groups.each do |g_name|
           next if g_name.blank?
           group = Group.find_or_create_by(name: g_name)
-          BillSupport.find_or_create_by!(bill: bill,supportable: group,support_type: "desagree")
+          BillSupport.find_or_create_by!(bill: bill,supportable: group,support_type: "disagree")
         end
 
         puts "[#{kind}] Saved: #{session}-#{number}: #{title}"
@@ -187,12 +178,12 @@ namespace :scrape do
     puts "Scraping complete."
   end
 
-    task sangiin_hp_bills: :environment do
+  task sangiin_hp_bills: :environment do
     require "open-uri"
     require "nokogiri"
     require "pdf-reader"
 
-    base_url = "https://www.sangiin.go.jp/japanese/joho1/kousei/gian/213/gian.htm"
+    base_url = "https://www.sangiin.go.jp/japanese/joho1/kousei/gian/217/gian.htm"
     base_uri = URI.parse(base_url)
 
     html = URI.open(base_url).read
@@ -210,7 +201,6 @@ namespace :scrape do
       next unless target_titles.key?(title)
 
       kind = target_titles[title]
-
       table = h2.xpath("following-sibling::table").first
       unless table
         puts "表が見つかりません: #{title}"
@@ -225,12 +215,9 @@ namespace :scrape do
         number = tds[1]&.text&.strip
         title_text = tds[2]&.text&.strip
 
-        body_link_href = tds[4]&.at_css("a")&.[]("href")
-        if body_link_href.blank?
-          puts "提出法律案リンクなし: #{session}-#{number}-#{title_text}"
-          next
-        end
+        # next unless title_text == "自殺対策基本法の一部を改正する法律案"
 
+        body_link_href = tds[4]&.at_css("a")&.[]("href")
         body_link = URI.join(base_uri, body_link_href).to_s
 
         # PDFをダウンロード
@@ -240,8 +227,62 @@ namespace :scrape do
         pdf_text = ""
         reader.pages.each { |page| pdf_text << page.text + "\n\n" }
 
-        # billsテーブルで検索 (kindを条件に追加)
-        bill = Bill.find_by(session: session, bill_number: number, kind: kind)
+        title_link_href = tds[2]&.at_css("a")&.[]("href")
+        if title_link_href.nil?
+          puts "⚠️ 議案件名リンクがありません: #{session}-#{number}-#{title_text}"
+          next
+        end
+
+        title_link = URI.join(base_uri, title_link_href).to_s
+        title_html = URI.open(title_link).read.force_encoding("UTF-8").scrub
+        title_doc = Nokogiri::HTML.parse(title_html)
+
+        # title_doc.css("th").each do |th|
+        #   puts "TH text: #{th.text.inspect} (#{th.text.encoding})"
+        # end
+
+        bill = Bill.find_by(session: session, number: number, kind: kind)
+
+        if bill.nil?
+          bill = Bill.create!(session: session,number: number,kind: kind,title: title_text)
+        #   puts "新しくBillを保存しました: #{session}-#{number}-#{title_text} (kind: #{kind})"
+        # else
+        #   puts "既にBillが存在します: #{session}-#{number}-#{title_text} (kind: #{kind})"
+        end
+
+        vote_row = title_doc.css("table.list_c tr").find do |tr|
+        tr.at_css("th")&.text&.strip == "採決方法"
+        end
+        if vote_row
+          vote_link = vote_row.at_css("a")&.[]("href")
+          vote_link = URI.join(title_link, vote_link).to_s if vote_link
+
+          if vote_link.nil? || vote_link.empty?
+            puts "⚠️ 採決リンクなし。スキップします。"
+            next
+          end
+          # puts "vote_link: #{vote_link.inspect}"
+          vote_doc = Nokogiri::HTML.parse(URI.open(vote_link, "r:Shift_JIS:UTF-8"))
+          vote_doc.css("li.giin").each do |li|
+            name = li.at_css(".names")&.text&.strip.gsub(/[[:space:]　]+/, "").strip
+            next if name.blank?
+
+            support_type = nil 
+            if li.at_css(".pros")&.text&.include?("賛成")
+              support_type = "agree"
+            elsif li.at_css(".cons")&.text&.include?("反対")
+              support_type = "disagree"
+            else
+              support_type = nil
+            end
+            puts "#{name}: #{support_type}"
+            if support_type
+              politician = Politician.find_or_create_by(name: name)
+              BillSupport.find_or_create_by(bill: bill, supportable: politician, support_type: support_type)
+            end
+          end
+        end
+
 
         if bill
           bill.sangi_hp_body_link = body_link

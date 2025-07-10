@@ -16,5 +16,15 @@ class PoliticiansController < ApplicationController
       .where(support_type: "propose_agree")
       .includes(:bill)
       .map(&:bill)
+
+    @vote_agree_bills = @politician.bill_supports
+      .where(support_type: "agree")
+      .includes(:bill)
+      .map(&:bill)
+
+    @vote_disagree_bills = @politician.bill_supports
+      .where(support_type: "disagree")
+      .includes(:bill)
+      .map(&:bill)
   end
 end

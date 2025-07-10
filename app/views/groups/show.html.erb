@@ -7,7 +7,7 @@
   <ul class="list-disc pl-6 space-y-1 mt-2">
     <% @propose_bills.each do |bill| %>
       <li>
-        <%= link_to bill.title, bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
       </li>
     <% end %>
   </ul>
@@ -18,18 +18,18 @@
   <ul class="list-disc pl-6 space-y-1 mt-2">
     <% @agree_bills.each do |bill| %>
       <li>
-        <%= link_to bill.title, bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
       </li>
     <% end %>
   </ul>
 <% end %>
 
-<% if @desagree_bills.any? %>
+<% if @disagree_bills.any? %>
   <h2 class="text-xl font-semibold mt-6">審議時反対会派として反対した議案</h2>
   <ul class="list-disc pl-6 space-y-1 mt-2">
-    <% @desagree_bills.each do |bill| %>
+    <% @disagree_bills.each do |bill| %>
       <li>
-        <%= link_to bill.title, bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
       </li>
     <% end %>
   </ul>
