@@ -125,6 +125,11 @@ namespace :scrape do
             h2 = houan_body_doc.at_css("h2#TopContents")
             ps = h2.xpath("following-sibling::p")
             body_text = ps.map(&:text).join("\n\n")
+
+            # revision_links = houan_body_doc.css("a").select { |a| a.text.include?("修正案") }
+            # revision_links.each do |link|
+            #   revision_url = URI.join(body_link, link["href"]).to_s
+            # end
           end
         end
 

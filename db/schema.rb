@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_07_10_074237) do
+ActiveRecord::Schema[7.2].define(version: 2025_07_10_130551) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -79,7 +79,24 @@ ActiveRecord::Schema[7.2].define(version: 2025_07_10_074237) do
     t.string "term_end"
   end
 
+  create_table "speeches", force: :cascade do |t|
+    t.bigint "politician_id", null: false
+    t.date "meeting_date"
+    t.string "source_url"
+    t.text "body"
+    t.string "session"
+    t.integer "speech_order"
+    t.string "name_of_meeting"
+    t.string "name_of_house"
+    t.string "external_speech_id"
+    t.text "ai_summary"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["politician_id"], name: "index_speeches_on_politician_id"
+  end
+
   add_foreign_key "bill_supports", "bills"
   add_foreign_key "politician_groups", "groups"
   add_foreign_key "politician_groups", "politicians"
+  add_foreign_key "speeches", "politicians"
 end

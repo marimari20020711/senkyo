@@ -31,6 +31,7 @@ namespace :import do
                          when /沖縄/ then "沖縄の風"
                          when /N党|Ｎ/ then "ＮＨＫから国民を守る党"
                          when /無所属/ then "各派に属しない議員"
+                         when /参政/ then "参政党"
                          else group_name
                          end
 
