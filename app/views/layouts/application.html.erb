@@ -10,4 +10,13 @@
     <%= render "layouts/navbar" %>
     <%= yield %>
   </body>
+  <footer>
+    <p class="text-xs text-gray-500 mt-6">
+    ※本ページに掲載している情報は、以下のページより取得・引用しています。<br>
+    衆議院ホームページ
+    （<%= link_to "https://www.shugiin.go.jp/", "https://www.shugiin.go.jp/", target: "_blank", class: "underline" %>）
+    参議院ホームページ
+    （<%= link_to "https://www.sangiin.go.jp/", "https://www.sangiin.go.jp/", target: "_blank", class: "underline" %>）
+    </p>
+  </footer>
 </html>
