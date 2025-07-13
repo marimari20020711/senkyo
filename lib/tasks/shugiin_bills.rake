@@ -25,7 +25,6 @@ namespace :scrape do
 
         begin
           html = URI.open(session_url).read
-        #   html = URI.open(session_url).read.encode("UTF-8", "Shift_JIS", invalid: :replace, undef: :replace, replace: "") # 修正済み
           doc = Nokogiri::HTML.parse(html)
         rescue OpenURI::HTTPError => e
           puts "⚠️ ページが存在しません: #{session_url} (#{e.message})"
@@ -39,7 +38,6 @@ namespace :scrape do
         table = anchor.xpath("following-sibling::table").first
         next unless table
 
-        # headers = table.css("tr").first.css("th").map { |th| th.text.strip }
         headers = table.css("th").map { |th| th.text.strip }
         col_indexes = {
           session: headers.find_index { |h| h.include?("提出回次") },
@@ -63,14 +61,14 @@ namespace :scrape do
 
           if progress_href
             data = fetch_shugiin_progress_data(session_url, progress_href)
-            kind = data[:kind]
+            kind = data[:kind].presence || table_name
             group_names = data[:group_names]
             proposer_names = data[:proposer_names]
             agreeer_names = data[:agreeer_names]
             discussion_agree_groups = data[:discussion_agree_groups]
             discussion_disagree_groups = data[:discussion_disagree_groups]
           else
-            kind = nil
+            kind = table_name
             group_names = proposer_names = agreeer_names = discussion_agree_groups = discussion_disagree_groups = []
           end
 
