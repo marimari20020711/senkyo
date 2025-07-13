@@ -1,45 +1,73 @@
 <h1 class="text-2xl font-bold mb-4">
-  <%= @group.name %> の関連議案
+  <%= @group.name %> の関連議案・所属議員
 </h1>
 
-<% if @propose_bills.any? %>
-  <h2 class="text-xl font-semibold mt-6">提出会派として提出した議案</h2>
-  <ul class="list-disc pl-6 space-y-1 mt-2">
-    <% @propose_bills.each do |bill| %>
-      <li>
-        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
-      </li>
+<!-- 🔧 提出会派 -->
+<div x-data="{ open: false }" class="mb-6">
+  <button @click="open = !open" class="text-xl font-semibold text-left w-full text-blue-700 hover:underline focus:outline-none">
+    提出会派として提出した議案（<%= @propose_bills.size %>件）
+  </button>
+  <div x-show="open" x-transition class="mt-2 ml-4">
+    <% if @propose_bills.any? %>
+      <ul class="list-disc pl-6 space-y-1 mt-2">
+        <% @propose_bills.sort_by { |bill| bill.session.to_i }.each do |bill| %>
+          <li>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="text-gray-500">該当する議案はありません。</p>
     <% end %>
-  </ul>
-<% end %>
+  </div>
+</div>
 
-<% if @agree_bills.any? %>
-  <h2 class="text-xl font-semibold mt-6">審議時賛成会派として賛成した議案</h2>
-  <ul class="list-disc pl-6 space-y-1 mt-2">
-    <% @agree_bills.each do |bill| %>
-      <li>
-        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
-      </li>
+<!-- 🔧 賛成会派 -->
+<div x-data="{ open: false }" class="mb-6">
+  <button @click="open = !open" class="text-xl font-semibold text-left w-full text-blue-700 hover:underline focus:outline-none">
+    審議時賛成会派として賛成した議案（<%= @agree_bills.size %>件）
+  </button>
+  <div x-show="open" x-transition class="mt-2 ml-4">
+    <% if @agree_bills.any? %>
+      <ul class="list-disc pl-6 space-y-1 mt-2">
+        <% @agree_bills.sort_by { |bill| bill.session.to_i }.each do |bill| %>
+          <li>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="text-gray-500">該当する議案はありません。</p>
     <% end %>
-  </ul>
-<% end %>
+  </div>
+</div>
 
-<% if @disagree_bills.any? %>
-  <h2 class="text-xl font-semibold mt-6">審議時反対会派として反対した議案</h2>
-  <ul class="list-disc pl-6 space-y-1 mt-2">
-    <% @disagree_bills.each do |bill| %>
-      <li>
-        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
-      </li>
+<!-- 🔧 反対会派 -->
+<div x-data="{ open: false }" class="mb-6">
+  <button @click="open = !open" class="text-xl font-semibold text-left w-full text-blue-700 hover:underline focus:outline-none">
+    審議時反対会派として反対した議案（<%= @disagree_bills.size %>件）
+  </button>
+  <div x-show="open" x-transition class="mt-2 ml-4">
+    <% if @disagree_bills.any? %>
+      <ul class="list-disc pl-6 space-y-1 mt-2">
+        <% @disagree_bills.sort_by { |bill| bill.session.to_i }.each do |bill| %>
+          <li>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="text-gray-500">該当する議案はありません。</p>
     <% end %>
-  </ul>
-<% end %>
+  </div>
+</div>
 
-<%# 所属議員一覧 %>
-<% if @group.politicians.any? %>
-  <div class="bg-gray-50 p-4 rounded-lg shadow mt-10">
-    <h2 class="text-xl font-semibold mb-4">所属議員一覧</h2>
-
+<!-- 🔧 所属議員一覧 -->
+<div x-data="{ open: false }" class="mb-6">
+  <button @click="open = !open" class="text-xl font-semibold text-left w-full text-blue-700 hover:underline focus:outline-none">
+    所属議員一覧（<%= @group.politicians.count %>人）
+  </button>
+  <div x-show="open" x-transition class="mt-4 bg-gray-50 p-4 rounded-lg shadow">
     <% shugin_members = @group.politicians.select { |p| p.name_of_house == "衆議院" } %>
     <% sangiin_members = @group.politicians.select { |p| p.name_of_house == "参議院" } %>
 
@@ -67,5 +95,4 @@
       </ul>
     <% end %>
   </div>
-<% end %>
-
+</div>
