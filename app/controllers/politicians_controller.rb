@@ -26,5 +26,11 @@ class PoliticiansController < ApplicationController
       .where(support_type: "disagree")
       .includes(:bill)
       .map(&:bill)
+
+    @speeches = KokkaiApiClient.fetch_speeches(
+      politician_name: @politician.name,
+      start_date: 5.years.ago.to_date,
+      end_date: Date.today
+    )
   end
 end

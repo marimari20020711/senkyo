@@ -35,9 +35,9 @@ namespace :import do
                          else group_name
                          end
 
-      politician = Politician.where("REPLACE(name, ' ', '') = ?", normalized_name).first_or_initialize
+      politician = Politician.find_or_initialize_by(normalized_name: normalized_name)
       politician.assign_attributes(
-        name: normalized_name,
+        name: name_only,
         name_reading: name_reading,
         real_name: real_name,
         district: district,
@@ -49,10 +49,8 @@ namespace :import do
       group = Group.find_or_create_by!(name: simplified_group)
       PoliticianGroup.find_or_create_by!(politician: politician, group: group)
 
-      puts "登録: #{normalized_name}（#{simplified_group}） 選挙区: #{district} 当選回数: #{winning_count}"
-
+      puts "登録: #{name_only}（#{simplified_group}） 選挙区: #{district} 当選回数: #{winning_count}"
     end
-
     puts "インポート完了"
   end
 end

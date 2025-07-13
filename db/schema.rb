@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_07_10_130551) do
+ActiveRecord::Schema[7.2].define(version: 2025_07_11_090800) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -77,6 +77,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_07_10_130551) do
     t.string "winning_count"
     t.text "profile"
     t.string "term_end"
+    t.string "normalized_name"
   end
 
   create_table "speeches", force: :cascade do |t|

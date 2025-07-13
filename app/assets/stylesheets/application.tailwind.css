@@ -11,3 +11,17 @@
 }
 
 */
+
+/* スクロールバーを非表示にするクラス */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+body {
+  overflow-x: auto;
+  min-width: 100vw;
+}

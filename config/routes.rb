@@ -19,6 +19,7 @@ Rails.application.routes.draw do
     root "bills#index"
     resources :bills, only: [:index, :show]
     resources :politicians, only: [:index, :show]
-  resources :groups, only: [:index, :show]
+    resources :groups, only: [:index, :show]
+    resources :speeches, only: [:index, :show]
   end
 end

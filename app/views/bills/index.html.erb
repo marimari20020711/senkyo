@@ -1,13 +1,23 @@
 <h1 class="text-2xl font-bold mb-6">議案検索結果一覧</h1>
 
 <% if @bills.any? %>
-  <ul class="space-y-2">
-    <% @bills.each do |bill| %>
-      <li>
-        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bill_path(bill), class: "text-blue-600 hover:underline" %>
-      </li>
-    <% end %>
-  </ul>
+  <% grouped_bills = @bills.group_by(&:kind).sort_by { |_, bills| -bills.size } %>
+
+  <% grouped_bills.each do |kind, bills| %>
+    <div x-data="{ open: false }" class="mb-6 border-b pb-2">
+      <button @click="open = !open" class="text-xl text-left w-full text-blue-700 hover:underline focus:outline-none">
+        <%= kind %>（<%= bills.count %>件）
+      </button>
+
+      <div x-show="open" x-transition class="mt-2 ml-4 space-y-2">
+        <% bills.each do |bill| %>
+          <div>
+            <%= link_to "#{bill.session}回 #{bill.number}番 #{bill.title}", bill_path(bill), class: "text-blue-600 hover:underline" %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
 <% else %>
   <p>該当する議案はありません。</p>
 <% end %>

@@ -41,51 +41,90 @@
   </ul>
 </div>
 
-<h1 class="text-2xl font-bold mb-4">
-  <%= @politician.name %> の関連議案
-</h1>
-
-<% if @propose_bills.any? %>
-  <h2 class="text-xl font-semibold mt-6">提出者として提出した議案</h2>
-  <ul class="list-disc pl-6 space-y-1 mt-2">
-    <% @propose_bills.each do |bill| %>
-      <li>
-        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
-      </li>
+<!-- 関連議案セクション -->
+<div x-data="{ open: false }" class="mb-6">
+  <button @click="open = !open" class="text-xl font-bold text-left w-full text-blue-700 hover:underline focus:outline-none">
+    <%= @politician.name %> の関連議案
+  </button>
+  <div x-show="open" x-transition class="mt-4">
+    <% if @propose_bills.any? %>
+      <h2 class="text-xl font-semibold mt-6">提出者として提出した議案</h2>
+      <ul class="list-disc pl-6 space-y-1 mt-2">
+        <% @propose_bills.each do |bill| %>
+          <li>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+          </li>
+        <% end %>
+      </ul>
     <% end %>
-  </ul>
-<% end %>
 
-<% if @propose_agree_bills.any? %>
-  <h2 class="text-xl font-semibold mt-6">提出賛成者として賛成した議案</h2>
-  <ul class="list-disc pl-6 space-y-1 mt-2">
-    <% @propose_agree_bills.each do |bill| %>
-      <li>
-        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
-      </li>
+    <% if @propose_agree_bills.any? %>
+      <h2 class="text-xl font-semibold mt-6">提出賛成者として賛成した議案</h2>
+      <ul class="list-disc pl-6 space-y-1 mt-2">
+        <% @propose_agree_bills.each do |bill| %>
+          <li>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+          </li>
+        <% end %>
+      </ul>
     <% end %>
-  </ul>
-<% end %>
 
-<% if @vote_agree_bills.any? %>
-  <h2 class="text-xl font-semibold mt-6">採決時賛成した議案</h2>
-  <ul class="list-disc pl-6 space-y-1 mt-2">
-    <% @vote_agree_bills.each do |bill| %>
-      <li>
-        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
-      </li>
+    <% if @vote_agree_bills.any? %>
+      <h2 class="text-xl font-semibold mt-6">採決時賛成した議案</h2>
+      <ul class="list-disc pl-6 space-y-1 mt-2">
+        <% @vote_agree_bills.each do |bill| %>
+          <li>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+          </li>
+        <% end %>
+      </ul>
     <% end %>
-  </ul>
-<% end %>
 
-<% if @vote_disagree_bills.any? %>
-  <h2 class="text-xl font-semibold mt-6">採決時反対した議案</h2>
-  <ul class="list-disc pl-6 space-y-1 mt-2">
-    <% @vote_disagree_bills.each do |bill| %>
-      <li>
-        <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
-      </li>
+    <% if @vote_disagree_bills.any? %>
+      <h2 class="text-xl font-semibold mt-6">採決時反対した議案</h2>
+      <ul class="list-disc pl-6 space-y-1 mt-2">
+        <% @vote_disagree_bills.each do |bill| %>
+          <li>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+          </li>
+        <% end %>
+      </ul>
     <% end %>
-  </ul>
-<% end %>
+  </div>
+</div>
 
+
+<!-- 発言検索結果 -->
+<div x-data="{ open: false }" class="mb-6">
+  <button @click="open = !open" class="text-xl font-bold text-left w-full text-blue-700 hover:underline focus:outline-none">
+    <%= @politician.name %> の国会発言
+  </button>
+  <div x-show="open" x-transition class="mt-4">
+    <% if @speeches.present? %>
+      <ul class="space-y-6">
+        <% @speeches.each do |speech| %>
+          <li class="bg-white p-4 rounded-lg shadow hover:shadow-md transition">
+            <!-- 会議情報 -->
+          <div class="text-sm text-gray-500 mb-1">
+            <strong><%= speech["nameOfHouse"] %></strong>
+            ／<%= speech["nameOfMeeting"] %>
+            ／<%= speech["date"] %>
+            ／第<%= speech["session"] %>回国会
+          </div>
+            <div class="text-md font-semibold text-gray-700 mb-2">
+              <%= speech["speaker"] %>
+            </div>
+            <p class="text-gray-800 text-sm mb-2">
+              <%= truncate(speech["speech"], length: 200) %>
+            </p>
+            <a href="<%= speech["speechURL"] %>" target="_blank" class="text-indigo-600 hover:underline text-sm">
+              全文を見る
+            </a>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="text-red-500 mt-6">発言が見つかりませんでした。</p>
+    <% end %>
+  </div>
+</div>
