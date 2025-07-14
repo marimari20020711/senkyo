@@ -146,11 +146,23 @@ namespace :scrape do
     {
       kind: data["議案種類"].to_s,
       group_names: data["議案提出会派"].to_s.split(/、|,|;/).map(&:strip),
-      proposer_names: data2.fetch("議案提出者一覧", "").split(/、|,|;/).map { |s| s.strip.sub(/君\z/, "") },
+      proposer_names: if data2["議案提出者一覧"].present?
+                     data2["議案提出者一覧"].split(/、|,|;/).map { |s| s.strip.sub(/君\z/, "") }
+                   else
+                     extract_names_from_text(data["議案提出者"])
+                   end,
       agreeer_names: data2.fetch("議案提出の賛成者", "").split(/、|,|;/).map { |s| s.strip.sub(/君\z/, "") },
       discussion_agree_groups: data["衆議院審議時賛成会派"].to_s.split(/、|,|;/).map(&:strip),
       discussion_disagree_groups: data["衆議院審議時反対会派"].to_s.split(/、|,|;/).map(&:strip)
     }
+  end
+
+  def extract_names_from_text(text)
+    return [] if text.blank?
+    # 「〇〇君外〇名」→「〇〇」
+    first_name = text.sub(/君外\d+名/, "").strip
+    # スペースや全角空白を除去して一人だけでも返す
+    [first_name.gsub(/[[:space:]]/, "")]
   end
 
   def fetch_shugiin_body_data(session_url, href)

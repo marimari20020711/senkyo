@@ -22,7 +22,7 @@ namespace :import do
 
       simplified_group = case group_name
                          when /立憲/ then "立憲民主党・無所属"
-                         when /国民/ then "国国民民主党・無所属クラブ"
+                         when /国民/ then "国民民主党・無所属クラブ"
                          when /自民/ then "自由民主党・無所属の会"
                          when /公明/ then "公明党"
                          when /共産/ then "日本共産党"
@@ -30,8 +30,11 @@ namespace :import do
                          when /れ新/ then "れいわ新選組"
                          when /沖縄/ then "沖縄の風"
                          when /N党|Ｎ/ then "ＮＨＫから国民を守る党"
-                         when /無所属/ then "各派に属しない議員"
+                         when /無/ then "無所属"
                          when /参政/ then "参政党"
+                         when /保守/ then "日本保守党"
+                         when /有志/ then "有志の会"      
+
                          else group_name
                          end
 
