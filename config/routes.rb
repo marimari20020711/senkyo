@@ -22,5 +22,5 @@ Rails.application.routes.draw do
   resources :politicians, only: [:index, :show]
   resources :groups, only: [:index, :show]
   resources :speeches, only: [:index, :show]
-
+  resources :links, only: [:index]
 end
