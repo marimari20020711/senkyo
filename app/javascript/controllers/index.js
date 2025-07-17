@@ -3,6 +3,12 @@
 // ./bin/rails generate stimulus controllerName
 
 import { application } from "./application"
+import CustomAutocompleteController from "./custom_autocomplete_controller"
+application.register("custom-autocomplete", CustomAutocompleteController)
 
-import HelloController from "./hello_controller"
-application.register("hello", HelloController)
+
+// import { application } from "./application"
+// import Autocomplete from "stimulus-autocomplete"
+
+// application.register("autocomplete", Autocomplete)
+

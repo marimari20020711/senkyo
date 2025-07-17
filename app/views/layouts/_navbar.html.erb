@@ -6,18 +6,19 @@
   <!-- 横スクロール可 & スクロールバー非表示 -->
   <div class="overflow-x-auto no-scrollbar">
     <div class="flex flex-row space-x-4 min-w-max">
-      
-      <%= search_form_for @bill_q, url: bills_path, method: :get, local: true, class: "flex items-center" do |f| %>
-        <%= f.search_field :title_cont, placeholder: "議案件名", class: "rounded p-1 text-black w-48" %>
+
+    
+      <%= search_form_for @bill_q, url: bills_path, method: :get, local: true, as: :bill_q, class: "flex items-center" do |f| %>
+        <%= f.search_field :title_cont, data: { controller: "custom-autocomplete", custom_autocomplete_url_value: autocomplete_bills_path, custom_autocomplete_query_param_value: "query" }, placeholder: "議案件名", class: "rounded p-1 text-black w-48",autocomplete: "off" %>
         <%= f.submit "検索", class: "ml-1 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded" %>
       <% end %>
 
-      <%= search_form_for @politician_q, url: politicians_path, method: :get, local: true, class: "flex items-center" do |f| %>
+      <%= search_form_for @politician_q, url: politicians_path, method: :get, local: true, as: :politician_q, class: "flex items-center" do |f| %>
         <%= f.search_field :name_cont, placeholder: "議員名", class: "rounded p-1 text-black w-48" %>
         <%= f.submit "検索", class: "ml-1 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded" %>
       <% end %>
 
-      <%= search_form_for @group_q, url: groups_path, method: :get, local: true, class: "flex items-center" do |f| %>
+      <%= search_form_for @group_q, url: groups_path, method: :get, local: true, as: :group_q, class: "flex items-center" do |f| %>
         <%= f.search_field :name_cont, placeholder: "会派名", class: "rounded p-1 text-black w-48" %>
         <%= f.submit "検索", class: "ml-1 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded" %>
       <% end %>

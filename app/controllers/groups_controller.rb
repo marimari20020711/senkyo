@@ -1,8 +1,8 @@
 class GroupsController < ApplicationController
   def index
-    @q = Group.ransack(params[:q])
-    @groups = @q.result(distinct: true)
+    @groups = @group_q.result(distinct: true).sort_by { |g| g.name.to_s.tr('ぁ-んァ-ン', 'あ-んあ-ん') }
   end
+
   
   def show
     @group = Group.find(params[:id])
@@ -11,10 +11,5 @@ class GroupsController < ApplicationController
     @propose_bills = @bill_supports.select { |s| s.support_type == "propose" }.map(&:bill)
     @agree_bills = @bill_supports.select { |s| s.support_type == "agree" }.map(&:bill)
     @disagree_bills = @bill_supports.select { |s| s.support_type == "disagree" }.map(&:bill)
-  end
-
-    # app/controllers/groups_controller.rb
-  def index
-    @groups = Group.all.sort_by { |g| g.name.to_s.tr('ぁ-んァ-ン', 'あ-んあ-ん') }
   end
 end

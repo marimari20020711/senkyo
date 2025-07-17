@@ -1,8 +1,7 @@
 class BillsController < ApplicationController
   # 議案一覧（検索結果）
   def index
-    @q = Bill.ransack(params[:q])
-    @bills = @q.result(distinct: true).order(created_at: :desc)
+    @bills = @bill_q.result(distinct: true).order(created_at: :desc)
     # @bills = @q.result.includes(bill_supports: :supportable)
     # @bills = @q.result.includes(bill_supports: :supportable).distinct.order(created_at: :desc)
   end
@@ -22,4 +21,36 @@ class BillsController < ApplicationController
     @vote_disagreeers = supports.select { |s| s.supportable_type == "Politician" && s.support_type == "disagree" }
   
   end
+
+  def autocomplete
+    query = params[:query].to_s.strip
+
+    Rails.logger.debug "🔍 オートコンプリートクエリ: #{query}"
+
+    return render json: [] if query.empty?  # 空のクエリに対する処理
+
+    results = Bill.where("title ILIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(query)}%")
+                  .order("created_at DESC")
+                  .limit(10)
+                  .pluck(:title)
+    render json: results.map { |title| { name: title } }
+  end
+
+#   def autocomplete
+#     query = params[:query].to_s.strip
+
+#     # Rails.logger.debug "🔍 オートコンプリートクエリ: #{query}"
+
+#     return render plain: "" if query.blank?  # 空のクエリに対する処理
+
+#     results = Bill.where("title ILIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(query)}%")
+#                   .order("created_at DESC")
+#                   .limit(10)
+#                   .pluck(:title)
+#     render inline: <<-ERB, layout: false, locals: { results: results }
+#       <% results.each do |title| %>
+#         <li class="list-group-item" role="option" data-autocomplete-value="<%= title %>"><%= title %></li>
+#       <% end %>
+#     ERB
+#   end
 end

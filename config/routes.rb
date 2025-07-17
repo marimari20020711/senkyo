@@ -1,8 +1,5 @@
 Rails.application.routes.draw do
-  get "politicians/show"
-  get "groups/show"
-  get "bills/index"
-  get "posts/index"
+  
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
@@ -15,11 +12,15 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   # root "posts#index"
-  Rails.application.routes.draw do
-    root "home#index"
-    resources :bills, only: [:index, :show]
-    resources :politicians, only: [:index, :show]
-    resources :groups, only: [:index, :show]
-    resources :speeches, only: [:index, :show]
+  
+  root "home#index"
+  resources :bills do
+    collection do
+      get :autocomplete
+    end
   end
+  resources :politicians, only: [:index, :show]
+  resources :groups, only: [:index, :show]
+  resources :speeches, only: [:index, :show]
+
 end

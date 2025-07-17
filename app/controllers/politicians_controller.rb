@@ -1,7 +1,6 @@
 class PoliticiansController < ApplicationController
   def index
-    @q = Politician.ransack(params[:q])
-    @politicians = @q.result(distinct: true)
+    @politicians = @politician_q.result(distinct: true)
   end
 
   def show
