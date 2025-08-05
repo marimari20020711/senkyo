@@ -4,19 +4,36 @@ namespace :scrape do
     require "open-uri"
     require "nokogiri"
 
-    sessions_map = {
-      "閣法" => (211..217).to_a.reverse,
-      "衆法" => (211..217).to_a.reverse,
-      "参法" => (211..217).to_a.reverse,
-      "予算" => (211..217).to_a.reverse,
-      "条約" => (211..217).to_a.reverse,
-      "承認" => (211..217).to_a.reverse,
-      "承諾" => (211..217).to_a.reverse,
-      "決算" => (211..217).to_a.reverse,
-      "決議" => (211..217).to_a.reverse,
-      "規則" => (211..217).to_a.reverse,
-      "規程" => (211..217).to_a.reverse
-    }
+    menu_url = "https://www.shugiin.go.jp/internet/itdb_gian.nsf/html/gian/menu.htm"
+begin
+  html = URI.open(menu_url).read
+  doc = Nokogiri::HTML.parse(html)
+
+  title = doc.at("title")&.text
+  latest_session = title[/第(\d+)回国会/, 1]&.to_i
+
+  raise "回次が取得できませんでした" unless latest_session
+
+  puts "🆕 最新回次: #{latest_session}"
+rescue => e
+  puts "⚠️ 最新回次取得失敗: #{e.message}"
+  latest_session = 217 # フォールバック（手動）
+end
+
+range = (211..latest_session).to_a.reverse
+sessions_map = {
+  "閣法" => range,
+  "衆法" => range,
+  "参法" => range,
+  "予算" => range,
+  "条約" => range,
+  "承認" => range,
+  "承諾" => range,
+  "決算" => range,
+  "決議" => range,
+  "規則" => range,
+  "規程" => range
+}
 
     sessions_map.each do |table_name, sessions|
       sessions.each do |session_number|
