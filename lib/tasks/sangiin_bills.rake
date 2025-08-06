@@ -1,12 +1,15 @@
+require_relative "../../lib/shugiin/latest_session"
+
 namespace :scrape do
   desc "Scrape Sangiin bills (参法・衆法・閣法)"
   task sangiin_hp_bills: :environment do
     require "open-uri"
     require "nokogiri"
     require "pdf-reader"
+    latest_session = Shugiin::LatestSession.fetch
 
     # 対象とする国会回次（複数指定可能）
-    target_sessions = (211..217).to_a
+    target_sessions = (211..latest_session).to_a
 
     target_sessions.each do |session_number|
       puts "========== #{session_number}回次 =========="
