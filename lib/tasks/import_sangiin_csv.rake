@@ -5,6 +5,12 @@ namespace :import do
   task sangiin_members: :environment do
     require 'csv'
 
+    puts "🧹 古い参議院議員データを削除中..."
+    sangiin_politicians = Politician.where(name_of_house: "参議院")
+    PoliticianGroup.where(politician_id: sangiin_politicians).delete_all
+    sangiin_politicians.delete_all
+
+    groups = Group.all.index_by(&:name)
     path = Rails.root.join("lib/assets/sangiin_members.csv")
     puts "CSV読み込み開始: #{path}"
 
@@ -46,7 +52,8 @@ namespace :import do
       )
       politician.save!
 
-      group = Group.find_or_create_by!(name: simplified_group)
+      group = groups[simplified_group] || Group.create!(name: simplified_group)
+      .tap { |g| groups[g.name] = g }
       PoliticianGroup.find_or_create_by!(politician: politician, group: group)
 
       puts "登録: #{name_only}（#{simplified_group}） 選挙区: #{district} 任期満了: #{term_end}"
