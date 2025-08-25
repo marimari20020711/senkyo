@@ -38,6 +38,7 @@ namespace :import do
                          when /N党|Ｎ/ then "ＮＨＫから国民を守る党"
                          when /無所属/ then "無所属"
                          when /参政/ then "参政党"
+                         when /保守/ then "日本保守党"
                          else group_name
                          end
 
