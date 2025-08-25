@@ -5,7 +5,7 @@ class SpeechesController < ApplicationController
     if @keyword.present?
       @speeches = KokkaiApiClient.fetch_speeches(
         politician_name: nil, # 指定しない
-        start_date: 5.years.ago.to_date,
+        start_date: 6.years.ago.to_date,
         end_date: Date.today,
         keyword: @keyword
       )
