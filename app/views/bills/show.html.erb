@@ -15,7 +15,7 @@
 <% if @bill.summary_text.present? %>
   <p class="mt-2 font-semibold">要綱概要:</p>
   <p class="whitespace-pre-wrap text-sm text-gray-700">
-    <%= truncate(@bill.summary_text, length: 3000) %>
+    <%= truncate(@bill.summary_text, length: 10000) %>
   </p>
 <% end %>
 
@@ -28,7 +28,14 @@
 
   <% if @proposers.any? %>
     <p><span class="font-semibold">提出者:</span>
-      <%= @proposers.map { |s| link_to s.supportable.name, politician_path(s.supportable), class: "text-blue-600 hover:underline" }.join(", ").html_safe %>
+      <%= @proposers.map { |s| 
+        if s.supportable.present?
+          link_to s.supportable.name, politician_path(s.supportable), class: "text-blue-600 hover:underline"
+        else
+          # DBにない場合は raw_politician をそのまま表示
+          content_tag(:span, s.raw_politician, class: "text-gray-600 italic")
+        end
+      }.join(", ").html_safe %>
     </p>
   <% end %>
 
