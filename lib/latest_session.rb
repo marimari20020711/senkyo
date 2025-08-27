@@ -14,9 +14,9 @@ class LatestSession
 
     raise "回次が取得できませんでした" unless latest_session
 
-    puts "🆕 最新回次: #{latest_session}"
+    Rails.logger.info "🆕 最新回次: #{latest_session}"
     rescue => e
-    puts "⚠️ 最新回次取得失敗: #{e.message}"
+    Rails.logger.info "⚠️ 最新回次取得失敗: #{e.message}"
     latest_session = 217 # フォールバック（手動）
     end
     latest_session
