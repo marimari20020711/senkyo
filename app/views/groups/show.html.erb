@@ -12,7 +12,7 @@
       <ul class="list-disc pl-6 space-y-1 mt-2">
         <% @propose_bills.sort_by { |bill| bill.session.to_i }.each do |bill| %>
           <li>
-            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bill_path(bill), class: "text-blue-600 hover:underline" %>
           </li>
         <% end %>
       </ul>
@@ -32,7 +32,7 @@
       <ul class="list-disc pl-6 space-y-1 mt-2">
         <% @agree_bills.sort_by { |bill| bill.session.to_i }.each do |bill| %>
           <li>
-            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bill_path(bill), class: "text-blue-600 hover:underline" %>
           </li>
         <% end %>
       </ul>
@@ -52,7 +52,7 @@
       <ul class="list-disc pl-6 space-y-1 mt-2">
         <% @disagree_bills.sort_by { |bill| bill.session.to_i }.each do |bill| %>
           <li>
-            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bills_path(q: { title_cont: bill.title }), class: "text-blue-600 hover:underline" %>
+            <%= link_to "#{bill.kind} #{bill.session}回 #{bill.number}番 #{bill.title}", bill_path(bill), class: "text-blue-600 hover:underline" %>
           </li>
         <% end %>
       </ul>
