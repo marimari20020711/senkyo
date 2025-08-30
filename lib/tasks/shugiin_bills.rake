@@ -1,133 +1,296 @@
+require "open-uri"
+require "nokogiri"
+require "latest_session"
+
 namespace :scrape do
   desc "Scrape Shugiin bills (衆法・参法・閣法)"
   task shugiin_hp_bills: :environment do
-    require "open-uri"
-    require "nokogiri"
-    require "latest_session"
+    ShugiinScraper.new.execute
+  end
+end
+
+class ShugiinScraper
+  def initialize
+    @debug_mode = ENV['DEBUG'] == "true"
+    @politician_cache = Politician.all.index_by(&:normalized_name)
+    range = setup_target_sessions
+    @sessions_map = {
+      "閣法" => range,
+      "衆法" => range,
+      "参法" => range,
+      "予算" => range,
+      "条約" => range,
+      "承認" => range,
+      "承諾" => range,
+      "決算" => range,
+      "決議" => range,
+      "規則" => range,
+      "規程" => range
+    }
+
+    @anchor_name = { "閣法" => "09", "衆法" => "05", "参法" => "06", "予算" => "07", "条約" => "08", "承認" =>"10", "承諾" =>"11", "決算" =>"13", "決議" => "17", "規則" =>"18", "規程" =>"19" }
+    
+    @kind_mapping = {
+        "閣法" => "法律案（内閣提出）",
+        "衆法" => "法律案（衆法）",
+        "参法" => "参法律案（参法）",
+        "決議" => "決議案",
+        "規則" => "規則案",
+        "規程" => "規程案"
+      }
+  end
+
+  # 国会回次取得
+  def setup_target_sessions
     latest_session = LatestSession.fetch
+    unless latest_session&.is_a?(Integer) && latest_session > 0
+      puts "ERROR: 最新国会情報の取得に失敗"
+      exit 1
+    end
+    (211..latest_session).to_a.reverse
+  end
 
-range = (211..latest_session).to_a.reverse
-sessions_map = {
-  "閣法" => range,
-  "衆法" => range,
-  "参法" => range,
-  "予算" => range,
-  "条約" => range,
-  "承認" => range,
-  "承諾" => range,
-  "決算" => range,
-  "決議" => range,
-  "規則" => range,
-  "規程" => range
-}
+  # メイン処理
+  def execute
+    start_time = Time.current
+    puts "[#{Time.current.strftime('%H:%M:%S')}] 衆議院スクレイピング開始"
+    
+    begin
+      target_sessions = setup_target_sessions
+        return unless target_sessions
+      puts ("対象国会: 第#{target_sessions.first}回〜第#{target_sessions.last}回")
 
-    sessions_map.each do |table_name, sessions|
-      sessions.each do |session_number|
-        session_url = "https://www.shugiin.go.jp/internet/itdb_gian.nsf/html/gian/kaiji#{session_number}.htm"
-        puts "▶️ Fetching #{table_name} for 第#{session_number}回国会"
-
-        begin
-          html = URI.open(session_url).read
-          doc = Nokogiri::HTML.parse(html)
-        rescue OpenURI::HTTPError => e
-          puts "⚠️ ページが存在しません: #{session_url} (#{e.message})"
-          next
-        end
-
-        anchor_name = { "閣法" => "09", "衆法" => "05", "参法" => "06", "予算" => "07", "条約" => "08", "承認" =>"10", "承諾" =>"11", "決算" =>"13", "決議" => "17", "規則" =>"18", "規程" =>"19" }[table_name]
-        anchor = doc.at_css("a[name=\"#{anchor_name}\"]")
-        next unless anchor
-
-        table = anchor.xpath("following-sibling::table").first
-        next unless table
-
-        headers = table.css("th").map { |th| th.text.strip }
-        col_indexes = {
-          session: headers.find_index { |h| h.include?("提出回次") },
-          number: headers.find_index { |h| h.include?("番号") },
-          title: headers.find_index { |h| h.include?("議案件名") },
-          status: headers.find_index { |h| h.include?("審議状況") },
-          progress: headers.find_index { |h| h.include?("経過情報") },
-          body: headers.find_index { |h| h.include?("本文情報") }
-        }
-
-        table.css("tr")[1..].each do |tr|
-          tds = tr.css("td")
-          next if tds.empty?
-
-          session = tds[col_indexes[:session]]&.text&.strip
-          number = col_indexes[:number] ? tds[col_indexes[:number]]&.text&.strip : nil
-          title = tds[col_indexes[:title]]&.text&.strip
-          discussion_status = tds[col_indexes[:status]]&.text&.strip
-          progress_href = tds[col_indexes[:progress]]&.at_css("a")&.[]("href")
-          body_href = col_indexes[:body] ? tds[col_indexes[:body]]&.at_css("a")&.[]("href") : nil
-
-          if progress_href
-            data = fetch_shugiin_progress_data(session_url, progress_href)
-            kind = data[:kind].presence || table_name
-            group_names = data[:group_names]
-            proposer_names = data[:proposer_names]
-            agreeer_names = data[:agreeer_names]
-            discussion_agree_groups = data[:discussion_agree_groups]
-            discussion_disagree_groups = data[:discussion_disagree_groups]
-          else
-            kind = table_name
-            group_names = proposer_names = agreeer_names = discussion_agree_groups = discussion_disagree_groups = []
-          end
-
-          kind_mapping = {
-            "閣法" => "法律案（内閣提出）",
-            "衆法" => "法律案（衆法）",
-            "参法" => "参法律案（参法）",
-            "決議" => "決議案",
-            "規則" => "規則案",
-            "規程" => "規程案"
-          }
-          kind = kind_mapping[kind] || kind
-
-          bill = Bill.find_or_initialize_by(session: session, number: number, title: title)
-
-          bill.session = session
-          bill.number = number
-          bill.discussion_status = discussion_status
-          bill.kind = kind
-
-          if body_href
-            body_data = fetch_shugiin_body_data(session_url, body_href)
-            bill.summary_link = body_data[:summary_link]
-            bill.summary_text = body_data[:summary_text]
-            bill.body_link = body_data[:body_link]
-            # bill.body_text = body_data[:body_text]
-          end
-
-          bill.save!
-
-          save_bill_supports(bill, group_names, proposer_names, agreeer_names, discussion_agree_groups, discussion_disagree_groups)
-          puts "[#{kind}] Saved: #{session}-#{number}: #{title}"
+      @sessions_map.each do |table_name, sessions|
+        sessions.each do |session_number|
+          process_session(table_name, session_number)
+          puts "完了: #{table_name} for 第#{session_number}回国会"
         end
       end
-
-      puts "Shugiin scraping complete."
+      duration = (Time.current - start_time).round(2)
+      puts "[#{Time.current.strftime('%H:%M:%S')}] スクレイピング完了 (#{duration}秒)"
+    rescue => e
+      puts "FATAL ERROR: #{e.message}"
+      puts e.backtrace.first(5).join("\n") if @debug_mode
+      exit 1
     end
   end
 
-  def fetch_shugiin_progress_data(session_url, href)
-    progress_url = URI.join(session_url, href).to_s
-    begin
-      progress_html = URI.open(progress_url, "r:Shift_JIS:UTF-8").read
-    rescue Encoding::UndefinedConversionError => e
-      puts "⚠️ エンコーディングエラー: #{progress_url} (#{e.message}) → スキップ"
-      return {
-      kind: [],
-      group_names: [],
-      proposer_names: [],
-      agreeer_names: [],
-      discussion_agree_groups: [],
-      discussion_disagree_groups: []
-      }
+  # 各セッション処理
+  def process_session(table_name, session_number)
+    session_url = "https://www.shugiin.go.jp/internet/itdb_gian.nsf/html/gian/kaiji#{session_number}.htm"
+    session_uri = URI.parse(session_url)
+    doc = fetch_session_document(session_url)
+    return unless doc
+      
+    process_table_section(doc, session_uri, table_name, session_number)
+  end
+
+  # HTML取得
+  def fetch_session_document(session_url)
+    html = URI.open(session_url).read
+    doc = Nokogiri::HTML(html)
+    puts "[DEBUG] #{session_url} HTML length: #{html.size}" if @debug_mode
+    return doc
+    rescue => e
+    puts "⚠️ 取得失敗: #{e.message}"
+    return nil
+    
+  end
+
+  # テーブル処理
+  def process_table_section(doc, session_url, table_name, session_number)
+    # anchorの存在チェック
+    anchor_name = @anchor_name[table_name]
+    anchor = doc.at_css("a[name=\"#{anchor_name}\"]")
+    return unless anchor
+
+    # tableの存在チェック（安全呼び出し演算子使用）
+    table = anchor.xpath("following-sibling::table")&.first
+    unless table
+      puts "警告: table要素が見つかりませんでした"
+      return
     end
+
+    # ヘッダーの取得（安全呼び出し演算子使用）
+    headers = table.css("th")&.map { |th| th&.text&.strip } || []
+    col_indexes = build_column_indexes(headers)
+    if headers.empty?
+      puts "警告: テーブルヘッダーが見つかりませんでした"
+      return
+    end
+    process_table_rows(table, col_indexes, session_url, session_number, table_name)
+  end
+
+  # カラムインデックスの取得（存在チェック付き）
+  def build_column_indexes(headers)  
+    col_indexes = {
+      session: headers.find_index { |h| h&.include?("提出回次") },
+      number: headers.find_index { |h| h&.include?("番号") },
+      title: headers.find_index { |h| h&.include?("議案件名") },
+      status: headers.find_index { |h| h&.include?("審議状況") },
+      progress: headers.find_index { |h| h&.include?("経過情報") },
+      body: headers.find_index { |h| h&.include?("本文情報") }
+    }
+    col_indexes
+  end
+
+   # 行処理
+  def process_table_rows(table, col_indexes, session_url, session_number, table_name)
+    table.css("tr")[1..].each do |tr|
+      # tdの存在チェック
+      tds = tr&.css("td") || []
+      next if tds.empty? 
+      puts "議案カラム処理開始: 議案名= #{tds[col_indexes[:title]]&.text&.strip}, (回次: #{tds[col_indexes[:session]]&.text&.strip}, テーブル名: #{table_name})"
+
+      # 各セルのデータを安全に取得
+      session = col_indexes[:session] && tds[col_indexes[:session]] ? 
+                tds[col_indexes[:session]]&.text&.strip : nil
+      
+      number = col_indexes[:number] && tds[col_indexes[:number]] ? 
+              tds[col_indexes[:number]]&.text&.strip : nil
+      
+      title = col_indexes[:title] && tds[col_indexes[:title]] ? 
+              tds[col_indexes[:title]]&.text&.strip : nil
+      
+      discussion_status = col_indexes[:status] && tds[col_indexes[:status]] ? 
+                          tds[col_indexes[:status]]&.text&.strip : nil
+
+      # リンクの安全な取得
+      progress_href = nil
+      if col_indexes[:progress] && tds[col_indexes[:progress]]
+        progress_link = tds[col_indexes[:progress]]&.at_css("a")
+        progress_href = progress_link&.[]("href")
+      end
+      
+      body_href = nil
+      if col_indexes[:body] && tds[col_indexes[:body]]
+        body_link = tds[col_indexes[:body]]&.at_css("a")
+        body_href = body_link&.[]("href")
+      end
+
+      # 必須カラムの存在チェック
+      required_columns = [:session, :title]
+      missing_columns = required_columns.select { |col| col_indexes[col].nil? }
+      if missing_columns.any?
+        puts "警告: 必須カラムが見つかりません: #{missing_columns.join(', ')}"
+        next
+      end
+
+      # 経過データの取得
+      progress_data = fetch_progress_data(session_url, progress_href, table_name) if progress_href&.present? 
+      # 本文データの取得
+      body_data = fetch_shugiin_body_data(session_url, body_href) if body_href&.present? 
+      # kindのマッピング
+      kind = progress_data[:kind]
+      
+      # 基本属性の設定
+      attributes = {
+        discussion_status: discussion_status&.strip,
+      }
+
+      # attributesにbody_dataをマージ            
+      if body_data&.is_a?(Hash)
+        attributes.merge!(body_data)
+      end
+      
+      bill = find_or_initialize_bill(session, number, title, kind)
+
+      # bill_saved = false
+      # 属性を設定して変更チェック
+      bill.assign_attributes(attributes)
+      # 変更がある場合のみ保存
+      if bill.changed?
+        
+        begin
+          bill.save!
+          # bill_saved = true
+          puts "✅ Saved: #{session}-#{number}: #{title} [#{kind}]"
+        rescue => e
+          # bill_saved = true
+          puts "❌ Save failed for Bill #{session}-#{number}-#{title}(kind: #{kind}): #{e.message}"
+          next
+           # エラーの場合は次の処理へ
+        end
+      else  
+        puts "⏭ Skip: No changes for #{session}-#{number}-#{title}(kind: #{kind})"
+         # 変更がない場合は次の処理へ
+      end
+
+      # 関連データの保存（安全に実行）
+      # if bill_saved
+      begin  
+        proposer_groups = progress_data[:proposer_groups] || []
+        proposer_names = progress_data[:proposer_names] || []
+        agreeer_names = progress_data[:agreeer_names] || []
+        agree_groups = progress_data[:agree_groups] || []
+        disagree_groups = progress_data[:disagree_groups] || []
+        save_bill_supports(bill, proposer_groups, proposer_names, agreeer_names, agree_groups, disagree_groups)
+        
+      puts "[#{kind}] 🔗 関連データ保存完了: #{session}-#{number}"
+      rescue => e
+        puts "❌ 関連データ保存エラー: #{e.message} - #{session}-#{number}: #{title}"
+      end
+    # end
+    end
+  end
+
+  # Billレコードの安全な取得・初期化
+  def find_or_initialize_bill(session, number, title, kind)
+    Bill.find_or_initialize_by(
+      session: session&.strip, 
+      number: number&.strip, 
+      title: title&.strip,
+      kind: kind&.strip
+    )
+  rescue => e
+    puts "❌ Bill初期化エラー #{session}-#{number}: #{e.message}"
+    nil
+  end
+
+  # progress_hrefの処理
+  def fetch_progress_data(session_url, progress_href, table_name)
+    begin
+      progress_data = fetch_shugiin_progress_data(session_url, progress_href, table_name)
+
+      # マッピング処理
+      if @kind_mapping && progress_data[:kind]
+        progress_data[:kind] = @kind_mapping[progress_data[:kind]] || progress_data[:kind]         
+      end
+
+      progress_data
+    rescue => e
+      puts "エラー: progress_data取得に失敗しました: #{e.message}"
+      default_progress_data(table_name)
+    end
+  end
+
+  def fetch_shugiin_progress_data(session_url, href, table_name)
+    progress_url = URI.join(session_url, href).to_s
+
+    begin
+      raw_data = URI.open(progress_url, 'rb').read
+      puts "📊 生データサイズ: #{raw_data.length}バイト"
+    
+    # デバッグ: 問題バイト検出
+    invalid_bytes = raw_data.bytes.select { |b| b > 127 && !raw_data.force_encoding('UTF-8').valid_encoding? }
+    if invalid_bytes.any?
+      puts "⚠️ 無効バイト検出: #{invalid_bytes.size}個"
+    end
+
+     # 🔧 多段階エンコーディング処理
+    progress_html = safe_encode_to_utf8(raw_data)
+      puts "✅ 変換完了: #{progress_html.length}文字"
+      
+    rescue => e
+      puts "❌ エラー: #{e.message}"
+      return default_progress_data(table_name)
+    end
+
     progress_doc = Nokogiri::HTML(progress_html)
     tables = progress_doc.css("table")
+
+    # デバッグ出力を追加
+    puts "🔍 テーブル数: #{tables.length}"
 
     data = {}
     tables[0]&.css("tr")&.each do |row|
@@ -137,113 +300,470 @@ sessions_map = {
       data[th.text.strip] = td.text.strip
     end
 
+    # 重要なデバッグ出力
+    # puts "📋 data内容: #{data.keys}"
+    puts "📝 議案提出者: '#{data.fetch("議案提出者", "")}'"
+
     data2 = {}
     if tables[1]&.css("tr")
-        tables[1]&.css("tr")&.each do |row|
+      tables[1]&.css("tr")&.each do |row|
         tds = row.css("td")
         next unless tds.size == 2
         data2[tds[0].text.strip] = tds[1].text.strip
       end
     end
 
+    puts "📋 data2内容: #{data2.keys}"
+    puts "📝 議案提出者一覧: '#{data2["議案提出者一覧"]}'"
+
+    progress_data = {
+      kind: data.fetch("議案種類", "").strip&.presence || table_name,
+      proposer_groups: split_and_clean(data.fetch("議案提出会派", "")),
+      proposer_names: begin
+        if data2["議案提出者一覧"].present?
+          split_and_clean(data2["議案提出者一覧"]).map { |s| s.sub(/君\z/, "") }
+        else
+          extract_names_from_text(data.fetch("議案提出者", ""))
+        end
+      end,
+      agreeer_names: split_and_clean(data2.fetch("議案提出の賛成者", "")).map { |s| s.sub(/君\z/, "") },
+      agree_groups: split_and_clean(data.fetch("衆議院審議時賛成会派", "")),
+      disagree_groups: split_and_clean(data.fetch("衆議院審議時反対会派", ""))
+      }
+    progress_data  
+  end
+
+  def default_progress_data(table_name)
+    mapped_kind = @kind_mapping ? (@kind_mapping[table_name] || table_name) : table_name
     {
-      kind: data["議案種類"].to_s,
-      group_names: data["議案提出会派"].to_s.split(/、|,|;/).map(&:strip),
-      proposer_names: if data2["議案提出者一覧"].present?
-                     data2["議案提出者一覧"].split(/、|,|;/).map { |s| s.strip.sub(/君\z/, "") }
-                   else
-                     extract_names_from_text(data["議案提出者"])
-                   end,
-      agreeer_names: data2.fetch("議案提出の賛成者", "").split(/、|,|;/).map { |s| s.strip.sub(/君\z/, "") },
-      discussion_agree_groups: data["衆議院審議時賛成会派"].to_s.split(/、|,|;/).map(&:strip),
-      discussion_disagree_groups: data["衆議院審議時反対会派"].to_s.split(/、|,|;/).map(&:strip)
+      kind: mapped_kind,
+      proposer_groups: [],
+      proposer_names: [],
+      agreeer_names: [],
+      agree_groups: [],
+      disagree_groups: []
     }
   end
 
   def extract_names_from_text(text)
-    return [] if text.blank?
-    # 「〇〇君外〇名」→「〇〇」
-    first_name = text.sub(/君外\d+名/, "").strip
-    # スペースや全角空白を除去して一人だけでも返す
-    [first_name.gsub(/[[:space:]]/, "")]
+
+    # デバッグ情報を追加
+    puts "🔍 extract_names_from_text呼び出し: '#{text}'"
+    
+    # 早期リターンでnilや空文字をガード
+    if text.blank?
+      puts "⚠️ テキストが空です"
+      return []
+    end
+
+    begin
+       # 「〇〇君外〇名」や「〇〇君」を除去して名前だけにする
+      names = text.to_s
+                  .split(/、|,|;/) # 複数区切りに対応
+                  .map do |s|
+                    s = s.sub(/君外[0-9０-９一二三四五六七八九十]+名/, "") # 君外〇名を削除
+                    s = s.sub(/君\z/, "")                                  # 君を削除
+                    s.strip
+                  end
+                  .reject(&:empty?)  # 空文字を除去
+
+      # 配列の各要素のスペースも除去
+      names.map { |n| n.gsub(/[[:space:]]/, "") }
+    rescue => e
+      puts "❌ 名前抽出エラー: #{e.message} - 入力: #{text.inspect}"
+      []
+    end
   end
 
   def fetch_shugiin_body_data(session_url, href)
+    # 入力値の安全性チェック
+    unless session_url&.present? && href&.present?
+      puts "⚠️ 無効な body URL情報: session_url=#{session_url}, href=#{href}"
+      return default_body_data
+    end
+
     body_url = URI.join(session_url, href).to_s
-    body_html = URI.open(body_url).read.encode("UTF-8", "Shift_JIS")
-    body_doc = Nokogiri::HTML(body_html)
 
-    summary_link = nil
-    summary_text = nil
-    body_link = nil
-    body_text = nil
-
-    youkou_link = body_doc.css("a").find { |a| a.text.include?("要綱") }
-    if youkou_link
-      summary_link = URI.join(body_url, youkou_link["href"]).to_s
-      summary_doc = Nokogiri::HTML(URI.open(summary_link, "r:Shift_JIS:UTF-8"))
-      h2 = summary_doc.at_css("h2#TopContents")
-      if h2
-        summary_text = ""
-        node = h2
-        while node = node.next_element
-          break if node.name =~ /^h\d$/i || node.name == "div"
-          summary_text << node.text.strip + "\n\n"
-        end
+    begin
+      # body_html = URI.open(body_url).read.encode("UTF-8", "Shift_JIS")
+      body_html = safe_encode_to_utf8(body_url)
+      body_doc = Nokogiri::HTML(body_html)
+      
+      unless body_doc
+        puts "❌ HTMLパースに失敗: #{body_url}"
+        return default_body_data
       end
+
+    rescue => e
+      puts "❌ Body HTML取得エラー: #{body_url} (#{e.message})"
+      return default_body_data
     end
 
-    houan_link = body_doc.css("a").find { |a| a.text.include?("提出時法律案") }
-    if houan_link
-      body_link = URI.join(body_url, houan_link["href"]).to_s
-
-      houan_body_doc = Nokogiri::HTML(URI.open(body_link, "r:Shift_JIS:UTF-8"))
-      h2 = houan_body_doc.at_css("h2#TopContents")
-      ps = h2.xpath("following-sibling::p")
-      body_text = ps.map(&:text).join("\n\n")
-    end
+    # 要綱データの安全な取得
+    summary_data = extract_summary_data(body_doc, body_url)
+    
+    # 法案本文データの安全な取得
+    body_data = extract_body_data(body_doc, body_url)
 
     {
-      summary_link: summary_link,
-      summary_text: summary_text,
-      body_link: body_link,
-      body_text: body_text
+      summary_link: summary_data[:link]&.strip.presence || nil,
+      summary_text: summary_data[:text]&.strip.presence || nil,
+      body_link: body_data[:link]&.strip.presence || nil,
+      # body_text: body_data[:text]&.strip.presence || nil
     }
   end
 
-  def save_bill_supports(bill, group_names, proposer_names, agreeer_names, agree_groups, disagree_groups)
-    group_names.each do |g_name|
-      next if g_name.blank?
-      group = Group.find_or_create_by(name: g_name)
-      BillSupport.find_or_create_by(bill: bill, supportable: group, support_type: "propose")
+  private
+
+  # デフォルトの空データを返す
+  def default_body_data
+    {
+      summary_link: nil,
+      summary_text: nil,
+      body_link: nil,
+      body_text: nil
+    }
+  end
+
+  # 要綱データを安全に抽出
+  def extract_summary_data(body_doc, body_url)
+    
+    youkou_link = body_doc&.css("a")&.find { |a| a&.text&.include?("要綱") }  
+    unless youkou_link&.[]("href")
+      puts "要綱リンクなし"
+      return { link: nil, text: nil }
     end
 
-    proposer_names.each do |p_name|
+    begin
+      summary_link = URI.join(body_url, youkou_link["href"]).to_s  
+      # summary_doc = Nokogiri::HTML(URI.open(summary_link).read.encode("UTF-8", "Shift_JIS", invalid: :replace, undef: :replace, replace: ""))
+      summary_doc = Nokogiri::HTML(safe_encode_to_utf8(summary_link))
+      h2 = summary_doc&.at_css("h2#TopContents")
+      
+      unless h2
+        puts "⚠️ 要綱のh2要素が見つかりません"
+        return { link: summary_link, text: nil }
+      end
+
+      summary_text = extract_text_content(h2)
+      puts "✅ 要綱テキスト抽出完了: #{summary_text&.length || 0}文字" 
+      { link: summary_link, text: summary_text }
+      
+    rescue => e
+      puts "❌ 要綱データ取得エラー: #{e.message}"
+      { link: nil, text: nil }
+    end
+  end
+
+  # 法案本文データを安全に抽出
+  def extract_body_data(body_doc, body_url)
+    houan_link = body_doc&.css("a")&.find { |a| a&.text&.include?("提出時法律案") } 
+    unless houan_link&.[]("href")
+      puts "法案本文リンクなし"
+      return { link: nil, text: nil }
+    end
+
+    body_link = URI.join(body_url, houan_link["href"]).to_s
+    unless body_link
+      puts "法案本文リンクなし"
+      return { link: nil, text: nil }
+    end
+
+    # houan_body_doc = Nokogiri::HTML(URI.open(body_link).read.encode("UTF-8", "Shift_JIS", invalid: :replace, undef: :replace, replace: ""))
+    houan_body_doc = Nokogiri::HTML(safe_encode_to_utf8(body_link))
+    h2 = houan_body_doc&.at_css("h2#TopContents")
+  
+    unless h2
+      puts "⚠️ 法案本文のh2要素が見つかりません"
+      return { link: body_link, text: nil }
+    end
+
+    ps = h2.xpath("following-sibling::p")
+    body_text = ps&.map { |p| p&.text&.strip }&.compact&.join("\n\n")
+    { link: body_link, text: body_text }
+      
+  end
+
+  # テキストコンテンツを安全に抽出
+  def extract_text_content(h2_element)
+    return nil unless h2_element
+    summary_text = ""
+    node = h2_element
+    
+    while node = node&.next_element
+      break if node&.name =~ /^h\d$/i || node&.name == "div"
+      text_content = node&.text&.strip
+      summary_text << "#{text_content}\n\n" if text_content&.present?
+    end
+    
+    summary_text.present? ? summary_text : nil
+  end
+
+
+  def save_bill_supports(bill, proposer_groups, proposer_names, agreeer_names, agree_groups, disagree_groups)
+    puts "💾 BillSupports保存開始: Bill ID=#{bill&.id}"
+    
+    # 入力値の安全性チェック
+    unless bill&.persisted?
+      puts "❌ 無効なBillオブジェクト: #{bill.inspect}"
+      return false
+    end
+
+    begin
+      # 各種サポートデータの保存実行
+      save_group_proposals(bill, proposer_groups)        # 提出会派
+      save_politician_proposals(bill, proposer_names) # 提出者
+      save_politician_agreements(bill, agreeer_names) # 賛成者
+      save_group_agreements(bill, agree_groups)      # 審議時賛成会派
+      save_group_disagreements(bill, disagree_groups) # 審議時反対会派
+      
+      puts "✅ BillSupports保存完了: Bill ID=#{bill.id}"
+      true
+      
+    rescue => e
+      puts "❌ BillSupports保存エラー: #{e.message}"
+      puts "📊 エラー詳細: Bill=#{bill&.id}, Groups=#{proposer_groups&.length}, Proposers=#{proposer_names&.length}"
+      false
+    end
+  end
+
+  def split_and_clean(text)
+    text.to_s.split(/、|,|;/).map(&:strip).reject(&:empty?)
+  end
+
+  # 提出会派の情報を保存
+  def save_group_proposals(bill, proposer_groups)
+    return unless proposer_groups&.is_a?(Array)
+    
+    proposer_groups.each_with_index do |g_name, index|
+      next if g_name.blank?
+      begin
+        group = find_or_create_group(g_name)
+        unless group
+          puts "  ⚠️ [#{index + 1}/#{proposer_groups.length}] 提出会派未発見: #{g_name}"
+          next
+        end
+        create_bill_support(bill, group, "propose", "提出会派")
+        # puts "  ✅ [#{index + 1}/#{proposer_groups.length}] 提出会派: #{g_name}" 
+      rescue => e
+        puts "  ❌ [#{index + 1}/#{proposer_groups.length}] 提出会派エラー: #{g_name} (#{e.message})"
+      end
+    end
+  end
+
+  # 提出者の情報を保存
+  def save_politician_proposals(bill, proposer_names)
+    return unless proposer_names&.is_a?(Array)
+    proposer_names.each_with_index do |p_name, index|
       next if p_name.blank?
-      normalized_name = p_name.delete(" ")
-      politician = Politician.find_by(normalized_name: normalized_name)
-      next if politician.nil?
-      BillSupport.find_or_create_by(bill: bill, supportable: politician, support_type: "propose")
+      
+      begin
+        politician = find_politician_by_name(p_name)
+        if politician
+          create_bill_support(bill, politician, "proposer_names", "提出者", strict: true)
+          # puts "  ✅ [#{index + 1}/#{proposer_names.length}] 提出者: #{p_name}"
+        else
+          
+          # politician が見つからなくても raw_politician で保存
+          BillSupport.create!(
+            bill: bill,
+            raw_politician: p_name,  
+            support_type: "proposer_names"
+          )
+          puts "[#{index + 1}/#{proposer_names.length}] 提出者: #{p_name}"
+        end
+      rescue => e
+        puts "  ❌ [#{index + 1}/#{proposer_names.length}] 提出者エラー: #{p_name} (#{e.message})"
+      end
     end
+  end
 
-    agreeer_names.each do |a_name|
-      next if a_name.blank?
-      normalized_name = a_name.delete(" ")
-      politician = Politician.find_by(normalized_name: normalized_name)
-      next if politician.nil?
-      BillSupport.find_or_create_by(bill: bill, supportable: politician, support_type: "propose_agree")
+  # 賛成者の情報を保存
+  def save_politician_agreements(bill, agreeer_names)
+    return unless agreeer_names&.is_a?(Array)
+    
+    agreeer_names.each_with_index do |a_name, index|
+      next if a_name.blank? 
+      begin
+        politician = find_politician_by_name(a_name) 
+        unless politician
+          puts "  ⚠️ [#{index + 1}/#{agreeer_names.length}] 賛成者未発見: #{a_name}"
+          next
+        end 
+        create_bill_support(bill, politician, "propose_agree", "賛成者", strict: true)
+        # puts "  ✅ [#{index + 1}/#{agreeer_names.length}] 賛成者: #{a_name}"
+      rescue => e
+        puts "  ❌ [#{index + 1}/#{agreeer_names.length}] 賛成者エラー: #{a_name} (#{e.message})"
+      end
     end
+  end
 
-    agree_groups.each do |g_name|
+  # 審議時賛成会派の情報を保存
+  def save_group_agreements(bill, agree_groups)
+    return unless agree_groups&.is_a?(Array)
+    agree_groups.each_with_index do |g_name, index|
       next if g_name.blank?
-      group = Group.find_or_create_by(name: g_name)
-      BillSupport.find_or_create_by!(bill: bill, supportable: group, support_type: "agree")
+      
+      begin
+        group = find_or_create_group(g_name)
+        next unless group
+        create_bill_support(bill, group, "agree", "審議時賛成会派", strict: true)
+        # puts "  ✅ [#{index + 1}/#{agree_groups.length}] 審議時賛成会派: #{g_name}"
+      rescue => e
+        puts "  ❌ [#{index + 1}/#{agree_groups.length}] 審議時賛成会派エラー: #{g_name} (#{e.message})"
+      end
     end
+  end
 
-    disagree_groups.each do |g_name|
+  # 審議時反対会派の情報を保存
+  def save_group_disagreements(bill, disagree_groups)
+    return unless disagree_groups&.is_a?(Array)
+    disagree_groups.each_with_index do |g_name, index|
       next if g_name.blank?
-      group = Group.find_or_create_by(name: g_name)
-      BillSupport.find_or_create_by!(bill: bill, supportable: group, support_type: "disagree")
+      
+      begin
+        group = find_or_create_group(g_name)
+        next unless group
+        create_bill_support(bill, group, "disagree", "審議時反対会派", strict: true)
+        # puts "  ✅ [#{index + 1}/#{disagree_groups.length}] 審議時反対会派: #{g_name}"
+      rescue => e
+        puts "  ❌ [#{index + 1}/#{disagree_groups.length}] 審議時反対会派エラー: #{g_name} (#{e.message})"
+      end
     end
+  end
+
+  # 政治家を名前で検索するメソッド
+  def find_politician_by_name(name)
+    return nil if name.blank?
+    
+    # 名前の正規化処理
+    normalized_name = normalize_politician_name(name)
+
+    # Politicianのnormalized_nameをキャッシュ（N+1防止）
+    politician_cache = Politician.all.index_by(&:normalized_name)
+    politician = politician_cache[normalized_name]
+    
+    unless politician
+      puts "⚠️ 政治家未発見: #{name} "
+    end
+    
+    politician
+  end
+
+  # 政治家名を正規化するメソッド
+  def normalize_politician_name(name)
+    return "" if name.blank?
+    # スペースの除去と統一化
+    name.to_s
+        .gsub(/\s+/, "")          # 全てのスペース（半角・全角）を除去
+        .strip                     # 前後の空白除去
+  end
+
+  # 会派を検索または作成するメソッド
+  def find_or_create_group(name)
+    return nil if name.blank?
+    
+    # 既存の会派を検索、なければ作成
+    group = Group.find_or_create_by(name: name) do |g|
+      g.name = name
+    end
+    group
+  rescue => e
+    puts "❌ 会派作成エラー: #{name} (#{e.message})"
+    nil
+  end
+
+  # BillSupportレコードを作成するメソッド
+  def create_bill_support(bill, supportable, support_type, description, strict: false)
+    
+    begin
+      if strict
+        BillSupport.find_or_create_by!(
+          bill: bill, 
+          supportable: supportable, 
+          support_type: support_type
+        )
+      else
+        BillSupport.find_or_create_by(
+          bill: bill, 
+          supportable: supportable, 
+          support_type: support_type
+        )
+      end
+      
+      # puts "✅ #{description}保存完了: #{supportable.name}"
+      
+    rescue ActiveRecord::RecordInvalid => e
+      puts "❌ #{description}保存エラー: #{supportable&.name} (#{e.message})"
+      raise if strict
+    end
+  end
+end
+
+def safe_encode_to_utf8(raw_data)
+
+ # 🎯 確実に問題となるパターンを除去
+  data = raw_data.dup.force_encoding('ASCII-8BIT')
+  
+  # 最頻出問題バイトを除去
+  problem_bytes = ["\x00", "\xFB", "\xFC", "\xFD", "\xFE", "\xFF"]
+  problem_bytes.each do |bad_byte|
+    data.gsub!(bad_byte.force_encoding('ASCII-8BIT'), ' ')
+  end
+
+  # 🚀 Step 2: UTF-8チェック（最優先・最高速）
+  begin
+    utf8_test = data.force_encoding('UTF-8')
+    if utf8_test.valid_encoding?
+      puts "✅ UTF-8として有効 → scrub処理で完了"
+      return utf8_test.scrub(' ')
+    else
+      puts "⚠️ UTF-8として無効 → 他のエンコーディングを試行"
+    end
+  rescue => e
+    puts "❌ UTF-8チェック失敗: #{e.message}"
+  end
+  
+  # Step 2: Shift_JISとして試行
+  begin
+    return raw_data.encode('UTF-8', 'Shift_JIS', 
+                          invalid: :replace, 
+                          undef: :replace, 
+                          replace: ' ')
+  rescue
+    # Shift_JISでも失敗
+  end
+  
+  # 🔄 Step 3: 他のエンコーディング試行（UTF-8が無効な場合のみ）
+  fallback_encodings = ['Shift_JIS', 'Windows-31J', 'EUC-JP']
+  
+  fallback_encodings.each do |encoding|
+    begin
+      puts "🔄 #{encoding}変換を試行"
+      result = cleaned_data.encode('UTF-8', encoding, 
+                                 invalid: :replace, 
+                                 undef: :replace, 
+                                 replace: ' ')
+      
+      # 結果の妥当性チェック
+      if result.length > 100 && result.valid_encoding? && result.include?('議案')
+        puts "✅ #{encoding}で変換成功: #{result.length}文字"
+        return result
+      else
+        puts "⚠️ #{encoding}: 結果が不十分 (#{result.length}文字)"
+      end
+      
+    rescue => e
+      puts "❌ #{encoding}変換失敗: #{e.message}"
+    end
+  end
+  
+  # 🆘 Step 4: 最終手段（すべて失敗した場合）
+  begin
+    puts "🔄 強制変換（最終手段）"
+    return cleaned_data.force_encoding('UTF-8').scrub(' ')
+  rescue => e
+    puts "❌ 強制変換も失敗: #{e.message}"
+    return ""
   end
 end
