@@ -28,7 +28,19 @@ class ShugiinScraper
       "規程" => range
     }
 
-    @anchor_name = { "閣法" => "09", "衆法" => "05", "参法" => "06", "予算" => "07", "条約" => "08", "承認" =>"10", "承諾" =>"11", "決算" =>"13", "決議" => "17", "規則" =>"18", "規程" =>"19" }
+    @caption_map = {
+       "閣法" => ["閣法の一覧"], 
+       "衆法" => ["衆法の一覧"],
+       "参法" => ["参法の一覧"],
+       "予算" => ["予算の一覧"],
+       "条約" => ["条約の一覧"],
+       "承認" => ["承認の一覧"], 
+       "承諾" => ["承諾の一覧"],
+       "決算" => ["決算その他"], 
+       "決議" => ["決議の一覧"],
+       "規則" => ["規則の一覧"],
+       "規程" => ["規程の一覧"]
+      }
     
     @kind_mapping = {
         "閣法" => "法律案（内閣提出）",
@@ -94,31 +106,40 @@ class ShugiinScraper
     rescue => e
     puts "⚠️ 取得失敗: #{e.message}"
     return nil
-    
+  end
+
+  # caption から正規化された名前を取得
+  def normalize_caption(caption_text)
+    @caption_map.each do |normalized, variants|
+      return normalized if variants.any? { |v| caption_text.include?(v) }
+    end
+    nil
   end
 
   # テーブル処理
   def process_table_section(doc, session_url, table_name, session_number)
-    # anchorの存在チェック
-    anchor_name = @anchor_name[table_name]
-    anchor = doc.at_css("a[name=\"#{anchor_name}\"]")
-    return unless anchor
+    # table_name（"承諾" など）に対応するテーブルを caption から探す
+    target_table = doc.css("table.table").find do |table|
+      caption_text = table.at_css("caption")&.text&.strip
+      next false unless caption_text
+      normalize_caption(caption_text) == table_name
+    end
 
     # tableの存在チェック（安全呼び出し演算子使用）
-    table = anchor.xpath("following-sibling::table")&.first
-    unless table
-      puts "警告: table要素が見つかりませんでした"
+    unless target_table
+      puts "警告: テーブル '#{table_name}' が見つかりませんでした"
       return
     end
 
     # ヘッダーの取得（安全呼び出し演算子使用）
-    headers = table.css("th")&.map { |th| th&.text&.strip } || []
-    col_indexes = build_column_indexes(headers)
+    headers = target_table.css("th")&.map { |th| th&.text&.strip } || []
     if headers.empty?
       puts "警告: テーブルヘッダーが見つかりませんでした"
       return
     end
-    process_table_rows(table, col_indexes, session_url, session_number, table_name)
+    col_indexes = build_column_indexes(headers)
+    # 行データ処理
+    process_table_rows(target_table, col_indexes, session_url, session_number, table_name)
   end
 
   # カラムインデックスの取得（存在チェック付き）
@@ -135,8 +156,8 @@ class ShugiinScraper
   end
 
    # 行処理
-  def process_table_rows(table, col_indexes, session_url, session_number, table_name)
-    table.css("tr")[1..].each do |tr|
+  def process_table_rows(target_table, col_indexes, session_url, session_number, table_name)
+    target_table.css("tr")[1..].each do |tr|
       # tdの存在チェック
       tds = tr&.css("td") || []
       next if tds.empty? 
