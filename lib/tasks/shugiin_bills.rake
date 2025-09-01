@@ -293,7 +293,7 @@ class ShugiinScraper
       puts "📊 生データサイズ: #{raw_data.length}バイト"
     
     # デバッグ: 問題バイト検出
-    invalid_bytes = raw_data.bytes.select { |b| b > 127 && !raw_data.force_encoding('UTF-8').valid_encoding? }
+    invalid_bytes = raw_data.bytes.select { |byte| byte > 127 && !raw_data.force_encoding('UTF-8').valid_encoding? }
     if invalid_bytes.any?
       puts "⚠️ 無効バイト検出: #{invalid_bytes.size}個"
     end
@@ -661,8 +661,7 @@ class ShugiinScraper
     normalized_name = normalize_politician_name(name)
 
     # Politicianのnormalized_nameをキャッシュ（N+1防止）
-    politician_cache = Politician.all.index_by(&:normalized_name)
-    politician = politician_cache[normalized_name]
+    politician = @politician_cache[normalized_name]
     
     unless politician
       puts "⚠️ 政治家未発見: #{name} "
