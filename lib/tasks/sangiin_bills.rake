@@ -49,7 +49,7 @@ class SangiinScraper
       # 各国会の処理
       target_sessions.each do |session_number|
         process_session(session_number)
-        puts "完了: #{table_name} for 第#{session_number}回国会"
+        puts "完了: 第#{session_number}回国会"
       end
 
       duration = (Time.current - start_time).round(2)
@@ -104,16 +104,16 @@ class SangiinScraper
   def process_table_section(doc, session_uri)
     doc.css("h2.title_text").each do |h2|
       kind_index = h2.text.strip
-      return unless @target_kinds.include?(kind_index)
+      next unless @target_kinds.include?(kind_index)
 
       table = validate_table_structure(h2)
-      return unless table
+      next unless table
 
       headers = extract_table_headers(table)
-      return unless headers
+      next unless headers
 
       col_indexes = build_column_indexes(headers)
-      return unless validate_required_columns(col_indexes)
+      next unless validate_required_columns(col_indexes)
 
       # テーブル行の処理
       process_table_rows(table, col_indexes, session_uri)
@@ -201,7 +201,7 @@ class SangiinScraper
     # 提出法律案PDFリンクの処理
       body_pdf_text = extract_body_pdf(body_link) if body_link
     
-      bill_data ={
+      bill_data = {
         session: session,
         number: number,
         title_name: title_name,
@@ -252,7 +252,10 @@ class SangiinScraper
     body_pdf_text = bill_data[:body_pdf_text]
 
     title_doc = fetch_title_document(title_link)
-    return unless title_doc
+    unless title_doc
+      puts "⚠️ title_docの取得に失敗しました: #{session}-#{number}-#{title_name}"
+      return 
+    end
 
     kind = extract_bill_kind(title_doc)
 
@@ -336,7 +339,7 @@ class SangiinScraper
 
           name = li.at_css(".names")&.text&.strip&.gsub(/[[:space:]　]+/, "")
           next if name.blank?
-          normalized_name = name.delete(" ")
+          normalized_name = name.to_s.gsub(/[[:space:]]/, "")
           politician = @politician_cache[normalized_name]
           next if politician.nil?
           support_type =
