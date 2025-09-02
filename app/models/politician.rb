@@ -17,6 +17,6 @@ class Politician < ApplicationRecord
   private
 
   def set_normalized_name
-    self.normalized_name = name.to_s.delete(" ")
+    self.normalized_name = name.to_s.gsub(/[[:space:]]/, "")
   end
 end
