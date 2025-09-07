@@ -10,7 +10,7 @@ class SpeechesController < ApplicationController
         keyword: @keyword
       )
       # ↓ speaker名とPoliticianモデルをマッピング
-      speaker_names = @speeches.map { |s| s["speaker"].to_s.delete(" ") }.uniq
+      speaker_names = @speeches.map { |s| s["speaker"].to_s.gsub(/[[:space:]]/, "") }.uniq
       @speaker_politicians = Politician.where(normalized_name: speaker_names)
                                        .index_by(&:normalized_name)
     else
