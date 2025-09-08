@@ -1,6 +1,7 @@
 require "open-uri"
 require "nokogiri"
 require "latest_session"
+require "net/http"   # fetch_raw_bytes 用
 
 namespace :scrape do
   desc "Scrape Shugiin bills (衆法・参法・閣法)"
@@ -188,7 +189,7 @@ class ShugiinScraper
         body_link = tds[col_indexes[:body]]&.at_css("a")
         body_href = body_link&.[]("href")
       end
-
+      
       # 必須カラムの存在チェック
       required_columns = [:session, :title]
       missing_columns = required_columns.select { |col| col_indexes[col].nil? }
@@ -280,16 +281,19 @@ class ShugiinScraper
 
       progress_data
     rescue => e
-      puts "エラー: progress_data取得に失敗しました: #{e.message}"
+      puts "❌エラー: progress_data取得に失敗しました: #{e.message}"
       default_progress_data(table_name)
     end
   end
 
+  # Shugiinの進捗データ取得
   def fetch_shugiin_progress_data(session_url, href, table_name)
     progress_url = URI.join(session_url, href).to_s
 
     begin
-      raw_data = URI.open(progress_url, 'rb').read
+      puts "[DEBUG] URL取得開始: #{progress_url}"
+      raw_data = fetch_raw_bytes(progress_url)
+      puts "[DEBUG] URL取得完了: #{raw_data.bytesize} bytes"
       puts "📊 生データサイズ: #{raw_data.length}バイト"
     
     # デバッグ: 問題バイト検出
@@ -303,7 +307,8 @@ class ShugiinScraper
       puts "✅ 変換完了: #{progress_html.length}文字"
       
     rescue => e
-      puts "❌ エラー: #{e.message}"
+      puts "❌ progressデータ取得エラー: #{e.message}"
+      puts e.backtrace.join("\n")
       return default_progress_data(table_name)
     end
 
@@ -396,18 +401,18 @@ class ShugiinScraper
     end
   end
 
-  def fetch_shugiin_body_data(session_url, href)
+  def fetch_shugiin_body_data(session_url, body_href)
+
     # 入力値の安全性チェック
-    unless session_url&.present? && href&.present?
-      puts "⚠️ 無効な body URL情報: session_url=#{session_url}, href=#{href}"
+    unless session_url&.present? && body_href&.present?
+      puts "⚠️ 無効な body URL情報: session_url=#{session_url}, body_href=#{body_href}"
       return default_body_data
     end
 
-    body_url = URI.join(session_url, href).to_s
+    body_url = URI.join(session_url, body_href).to_s
 
     begin
-      # body_html = URI.open(body_url).read.encode("UTF-8", "Shift_JIS")
-      body_html = safe_encode_to_utf8(body_url)
+      body_html = fetch_html(body_url)
       body_doc = Nokogiri::HTML(body_html)
       
       unless body_doc
@@ -457,8 +462,7 @@ class ShugiinScraper
 
     begin
       summary_link = URI.join(body_url, youkou_link["href"]).to_s  
-      # summary_doc = Nokogiri::HTML(URI.open(summary_link).read.encode("UTF-8", "Shift_JIS", invalid: :replace, undef: :replace, replace: ""))
-      summary_doc = Nokogiri::HTML(safe_encode_to_utf8(summary_link))
+      summary_doc = Nokogiri::HTML(fetch_html(summary_link))
       h2 = summary_doc&.at_css("h2#TopContents")
       
       unless h2
@@ -472,6 +476,7 @@ class ShugiinScraper
       
     rescue => e
       puts "❌ 要綱データ取得エラー: #{e.message}"
+      puts e.backtrace.join("\n")
       { link: nil, text: nil }
     end
   end
@@ -490,8 +495,7 @@ class ShugiinScraper
       return { link: nil, text: nil }
     end
 
-    # houan_body_doc = Nokogiri::HTML(URI.open(body_link).read.encode("UTF-8", "Shift_JIS", invalid: :replace, undef: :replace, replace: ""))
-    houan_body_doc = Nokogiri::HTML(safe_encode_to_utf8(body_link))
+    houan_body_doc = Nokogiri::HTML(fetch_html(body_link))
     h2 = houan_body_doc&.at_css("h2#TopContents")
   
     unless h2
@@ -581,12 +585,11 @@ class ShugiinScraper
       begin
         politician = find_politician_by_name(p_name)
         if politician
-          create_bill_support(bill, politician, "proposer_names", "提出者", strict: true)
+          create_bill_support(bill, politician, "proposer_names", "提出者")
           # puts "  ✅ [#{index + 1}/#{proposer_names.length}] 提出者: #{p_name}"
-        else
-          
+        else 
           # politician が見つからなくても raw_politician で保存
-          BillSupport.create!(
+          BillSupport.find_or_create_by!(
             bill: bill,
             raw_politician: p_name,  
             support_type: "proposer_names"
@@ -611,7 +614,7 @@ class ShugiinScraper
           puts "  ⚠️ [#{index + 1}/#{agreeer_names.length}] 賛成者未発見: #{a_name}"
           next
         end 
-        create_bill_support(bill, politician, "propose_agree", "賛成者", strict: true)
+        create_bill_support(bill, politician, "propose_agree", "賛成者")
         # puts "  ✅ [#{index + 1}/#{agreeer_names.length}] 賛成者: #{a_name}"
       rescue => e
         puts "  ❌ [#{index + 1}/#{agreeer_names.length}] 賛成者エラー: #{a_name} (#{e.message})"
@@ -628,7 +631,7 @@ class ShugiinScraper
       begin
         group = find_or_create_group(g_name)
         next unless group
-        create_bill_support(bill, group, "agree", "審議時賛成会派", strict: true)
+        create_bill_support(bill, group, "agree", "審議時賛成会派")
         # puts "  ✅ [#{index + 1}/#{agree_groups.length}] 審議時賛成会派: #{g_name}"
       rescue => e
         puts "  ❌ [#{index + 1}/#{agree_groups.length}] 審議時賛成会派エラー: #{g_name} (#{e.message})"
@@ -645,7 +648,7 @@ class ShugiinScraper
       begin
         group = find_or_create_group(g_name)
         next unless group
-        create_bill_support(bill, group, "disagree", "審議時反対会派", strict: true)
+        create_bill_support(bill, group, "disagree", "審議時反対会派")
         # puts "  ✅ [#{index + 1}/#{disagree_groups.length}] 審議時反対会派: #{g_name}"
       rescue => e
         puts "  ❌ [#{index + 1}/#{disagree_groups.length}] 審議時反対会派エラー: #{g_name} (#{e.message})"
@@ -694,49 +697,45 @@ class ShugiinScraper
   end
 
   # BillSupportレコードを作成するメソッド
-  def create_bill_support(bill, supportable, support_type, description, strict: false)
+  def create_bill_support(bill, supportable, support_type, description)
     
     begin
-      if strict
         BillSupport.find_or_create_by!(
           bill: bill, 
           supportable: supportable, 
           support_type: support_type
         )
-      else
-        BillSupport.find_or_create_by(
-          bill: bill, 
-          supportable: supportable, 
-          support_type: support_type
-        )
-      end
-      
       # puts "✅ #{description}保存完了: #{supportable.name}"
       
     rescue ActiveRecord::RecordInvalid => e
       puts "❌ #{description}保存エラー: #{supportable&.name} (#{e.message})"
-      raise if strict
+      raise e
     end
   end
 end
 
+def fetch_raw_bytes(url)
+  uri = URI.parse(url)
+  Net::HTTP.get(uri) # これは必ず ASCII-8BIT の String で返る
+end
+
+def fetch_html(url)
+  raw_data = fetch_raw_bytes(url)
+  safe_encode_to_utf8(raw_data)
+end
+
 def safe_encode_to_utf8(raw_data)
+  return "" if raw_data.nil? || raw_data.empty?
 
- # 🎯 確実に問題となるパターンを除去
   data = raw_data.dup.force_encoding('ASCII-8BIT')
-  
-  # 最頻出問題バイトを除去
-  problem_bytes = ["\x00", "\xFB", "\xFC", "\xFD", "\xFE", "\xFF"]
-  problem_bytes.each do |bad_byte|
-    data.gsub!(bad_byte.force_encoding('ASCII-8BIT'), ' ')
-  end
 
-  # 🚀 Step 2: UTF-8チェック（最優先・最高速）
+  # 🚀 Step 1: UTF-8チェック（最優先・最高速）
   begin
     utf8_test = data.force_encoding('UTF-8')
     if utf8_test.valid_encoding?
       puts "✅ UTF-8として有効 → scrub処理で完了"
-      return utf8_test.scrub(' ')
+      puts "[SUCCESS] 使用エンコーディング: UTF-8"
+      return utf8_test.scrub('?')
     else
       puts "⚠️ UTF-8として無効 → 他のエンコーディングを試行"
     end
@@ -746,44 +745,109 @@ def safe_encode_to_utf8(raw_data)
   
   # Step 2: Shift_JISとして試行
   begin
-    return raw_data.encode('UTF-8', 'Shift_JIS', 
+    test_result = data.encode('UTF-8', 'Shift_JIS', 
                           invalid: :replace, 
                           undef: :replace, 
-                          replace: ' ')
-  rescue
-    # Shift_JISでも失敗
+                          replace: '【REPLACED】')
+
+    replacement_count = test_result.scan('【REPLACED】').length
+    
+    # 実際の変換（? で置換）
+    sjis_result = data.encode('UTF-8', 'Shift_JIS', 
+                             invalid: :replace, 
+                             undef: :replace, 
+                             replace: '?')
+
+    if sjis_result.valid_encoding?                     
+      if replacement_count > 0
+        puts "⚠️ Shift_JIS変換:  #{replacement_count}文字を '?' に置換しました"
+      else
+        puts "✅ Shift_JISで変換成功: #{sjis_result.length}文字"
+      end
+      puts "[SUCCESS] 使用エンコーディング: Shift_JIS"
+      return sjis_result.scrub('?')
+    else
+      puts "⚠️ Shift_JIS変換後も無効"
+    end
+  rescue => e
+     # 呼び出し元に伝播しない
+    puts "⚠️ Shift_JIS変換失敗: #{e.class} - #{e.message}"
   end
   
   # 🔄 Step 3: 他のエンコーディング試行（UTF-8が無効な場合のみ）
-  fallback_encodings = ['Shift_JIS', 'Windows-31J', 'EUC-JP']
-  
+  fallback_encodings = ['Windows-31J', 'EUC-JP']
   fallback_encodings.each do |encoding|
     begin
       puts "🔄 #{encoding}変換を試行"
-      result = cleaned_data.encode('UTF-8', encoding, 
+      test_result = data.encode('UTF-8', encoding, 
                                  invalid: :replace, 
                                  undef: :replace, 
-                                 replace: ' ')
+                                 replace: '【REPLACED】')
+      
+      replacement_count = test_result.scan('【REPLACED】').length
+    
+      # 実際の変換（? で置換）
+      encoding_result = data.encode('UTF-8', encoding, 
+                              invalid: :replace, 
+                              undef: :replace, 
+                              replace: '?')
       
       # 結果の妥当性チェック
-      if result.length > 100 && result.valid_encoding? && result.include?('議案')
-        puts "✅ #{encoding}で変換成功: #{result.length}文字"
-        return result
+      if encoding_result.valid_encoding? && encoding_result.length > 0
+        if replacement_count > 0
+          puts "⚠️ #{encoding}変換:  #{replacement_count}を '?' に置換しました"
+        else
+          puts "✅ #{encoding}で変換成功: #{encoding_result.length}文字"
+        end
+        puts "[SUCCESS] 使用エンコーディング: #{encoding}"
+        return encoding_result.scrub('?')
       else
         puts "⚠️ #{encoding}: 結果が不十分 (#{result.length}文字)"
       end
-      
     rescue => e
       puts "❌ #{encoding}変換失敗: #{e.message}"
     end
   end
+
+  # 🎯 包括的パターンクリーニング（最優先）
+  data = comprehensive_pattern_clean(data)
   
+  # 残りのクリーニング
+  data = clean_incomplete_multibyte_sequences(data)
+
   # 🆘 Step 4: 最終手段（すべて失敗した場合）
   begin
     puts "🔄 強制変換（最終手段）"
-    return cleaned_data.force_encoding('UTF-8').scrub(' ')
+    result = data.force_encoding('UTF-8').scrub(' ')
+    puts "[SUCCESS] 使用エンコーディング: 強制UTF-8"
+    return result
   rescue => e
     puts "❌ 強制変換も失敗: #{e.message}"
     return ""
   end
+end
+
+# 補助メソッド：不完全なマルチバイト文字列をクリーンアップ
+def clean_incomplete_multibyte_sequences(data)
+  # 文字境界で切り捨てられた可能性のある末尾バイトを除去
+  while data.length > 0 && data[-1].ord > 127
+    data = data[0..-2]
+  end
+  data
+end
+
+def comprehensive_pattern_clean(data)
+  # 🚀 無効パターンを一括処理
+  invalid_patterns = [
+    /[\x80-\x9F][\x20-\x7F]/n,           # \x87@ 系
+    /[\x80-\x9F][\x80-\x9F]/n,           # 連続無効バイト
+    /[\xFB-\xFF]./n,                     # \xFB\xFC 系（重要！）
+    /[\x00-\x08\x0B\x0C\x0E-\x1F]/n     # 制御文字
+  ]
+  
+  invalid_patterns.each do |pattern|
+    data.gsub!(pattern, ' ')
+  end
+  
+  data
 end

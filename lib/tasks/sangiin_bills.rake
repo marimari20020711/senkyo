@@ -90,7 +90,8 @@ class SangiinScraper
   # セッション文書の取得    
   def fetch_session_document(session_url)
     begin
-      html = URI.open(session_url).read
+      # html = URI.open(session_url).read
+      html = fetch_html(session_url)
       doc = Nokogiri::HTML(html)
       puts "[DEBUG] #{session_url} HTML length: #{html.size}" if @debug_mode
       return doc
@@ -364,5 +365,104 @@ class SangiinScraper
     else
       puts "🔕 採決情報がありません: #{session}-#{number}-#{title_name}(kind: #{kind})"
     end
+  end
+
+  def fetch_raw_bytes(url)
+    uri = URI.parse(url)
+    Net::HTTP.get(uri) # 必ず ASCII-8BIT の String で返る
+  end
+
+  def fetch_html(url)
+    raw_data = fetch_raw_bytes(url)
+    safe_encode_to_utf8(raw_data)
+  end
+
+  def safe_encode_to_utf8(raw_data)
+    return "" if raw_data.nil? || raw_data.empty?
+
+    data = raw_data.dup.force_encoding('ASCII-8BIT')
+
+    # Step 1: UTF-8チェック
+    begin
+      utf8_test = data.force_encoding('UTF-8')
+      if utf8_test.valid_encoding?
+        puts "✅ UTF-8として有効 → scrub処理で完了"
+        puts "[SUCCESS] 使用エンコーディング: UTF-8"
+        return utf8_test.scrub('?')
+      else
+        puts "⚠️ UTF-8として無効 → 他のエンコーディングを試行"
+      end
+    rescue => e
+      puts "❌ UTF-8チェック失敗: #{e.message}"
+    end
+    
+    # Step 2: Shift_JIS
+    begin
+      test_result = data.encode('UTF-8', 'Shift_JIS', invalid: :replace, undef: :replace, replace: '【REPLACED】')
+      replacement_count = test_result.scan('【REPLACED】').length
+      sjis_result = data.encode('UTF-8', 'Shift_JIS', invalid: :replace, undef: :replace, replace: '?')
+
+      if sjis_result.valid_encoding?                     
+        if replacement_count > 0
+          puts "⚠️ Shift_JIS変換: #{replacement_count}文字を '?' に置換しました"
+        else
+          puts "✅ Shift_JISで変換成功: #{sjis_result.length}文字"
+        end
+        puts "[SUCCESS] 使用エンコーディング: Shift_JIS"
+        return sjis_result.scrub('?')
+      end
+    rescue => e
+      puts "⚠️ Shift_JIS変換失敗: #{e.class} - #{e.message}"
+    end
+    
+    # Step 3: 他の候補
+    fallback_encodings = ['Windows-31J', 'EUC-JP']
+    fallback_encodings.each do |encoding|
+      begin
+        puts "🔄 #{encoding}変換を試行"
+        test_result = data.encode('UTF-8', encoding, invalid: :replace, undef: :replace, replace: '【REPLACED】')
+        replacement_count = test_result.scan('【REPLACED】').length
+        encoding_result = data.encode('UTF-8', encoding, invalid: :replace, undef: :replace, replace: '?')
+        if encoding_result.valid_encoding? && encoding_result.length > 0
+          puts "✅ #{encoding}で変換成功 (#{encoding_result.length}文字)"
+          puts "[SUCCESS] 使用エンコーディング: #{encoding}"
+          return encoding_result.scrub('?')
+        end
+      rescue => e
+        puts "❌ #{encoding}変換失敗: #{e.message}"
+      end
+    end
+
+    # Step 4: クリーンアップ
+    data = comprehensive_pattern_clean(data)
+    data = clean_incomplete_multibyte_sequences(data)
+
+    begin
+      puts "🔄 強制変換（最終手段）"
+      result = data.force_encoding('UTF-8').scrub(' ')
+      puts "[SUCCESS] 使用エンコーディング: 強制UTF-8"
+      return result
+    rescue => e
+      puts "❌ 強制変換も失敗: #{e.message}"
+      return ""
+    end
+  end
+
+  def clean_incomplete_multibyte_sequences(data)
+    while data.length > 0 && data[-1].ord > 127
+      data = data[0..-2]
+    end
+    data
+  end
+
+  def comprehensive_pattern_clean(data)
+    invalid_patterns = [
+      /[\x80-\x9F][\x20-\x7F]/n,
+      /[\x80-\x9F][\x80-\x9F]/n,
+      /[\xFB-\xFF]./n,
+      /[\x00-\x08\x0B\x0C\x0E-\x1F]/n
+    ]
+    invalid_patterns.each { |pattern| data.gsub!(pattern, ' ') }
+    data
   end
 end
