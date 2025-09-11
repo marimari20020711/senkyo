@@ -2,6 +2,7 @@ require "open-uri"
 require "nokogiri"
 require "pdf-reader"
 require "latest_session"
+require "logger"
 
 namespace :scrape do
   desc "Scrape Sangiin bills (参法・衆法・閣法)"
@@ -15,6 +16,8 @@ class SangiinScraper
   def initialize
     # デバッグモード設定
     @debug_mode = ENV['DEBUG'] == 'true'
+    @logger = Logger.new($stdout)
+    @logger.level = @debug_mode ? Logger::DEBUG : Logger::INFO
     # Politicianのnormalized_nameをキャッシュ（N+1防止）
     @politician_cache = Politician.all.index_by(&:normalized_name)
     @target_kinds = [
@@ -38,27 +41,27 @@ class SangiinScraper
     # メイン実行メソッド
   def execute
     start_time = Time.current
-    puts "[#{Time.current.strftime('%H:%M:%S')}] 参議院スクレイピング開始"
+    @logger.info "[#{Time.current.strftime('%H:%M:%S')}] 参議院スクレイピング開始"
     
     # 対象とする国会回次（複数指定可能）
     begin
       target_sessions = setup_target_sessions
       return unless target_sessions
-      puts ("対象国会: 第#{target_sessions.first}回〜第#{target_sessions.last}回")
+      @logger.info "対象国会: 第#{target_sessions.first}回〜第#{target_sessions.last}回"
 
       # 各国会の処理
       target_sessions.each do |session_number|
         process_session(session_number)
-        puts "完了: 第#{session_number}回国会"
+        @logger.info "完了: 第#{session_number}回国会"
       end
 
       duration = (Time.current - start_time).round(2)
-      puts "[#{Time.current.strftime('%H:%M:%S')}] スクレイピング完了 (#{duration}秒)"
-      puts "Sangiin scraping complete."
+      @logger.info "[#{Time.current.strftime('%H:%M:%S')}] スクレイピング完了 (#{duration}秒)"
+      @logger.info "Sangiin scraping complete."
 
     rescue => e
-      puts "FATAL ERROR: スクレイピング全体エラー: #{e.message}"
-      puts e.backtrace.first(5).join("\n") if @debug_mode
+      @logger.fatal "FATAL ERROR: スクレイピング全体エラー: #{e.message}"
+      @logger.debug e.backtrace.first(5).join("\n") if @debug_mode
       exit 1
     end
   end
@@ -69,7 +72,7 @@ class SangiinScraper
   def setup_target_sessions  
     latest_session = LatestSession.fetch
     unless latest_session&.is_a?(Integer) && latest_session > 0
-      puts "ERROR: 最新国会情報の取得に失敗"
+      @logger.error "ERROR: 最新国会情報の取得に失敗"
       exit 1
     end
 
@@ -93,10 +96,10 @@ class SangiinScraper
       # html = URI.open(session_url).read
       html = fetch_html(session_url)
       doc = Nokogiri::HTML(html)
-      puts "[DEBUG] #{session_url} HTML length: #{html.size}" if @debug_mode
+      @logger.debug "[DEBUG] #{session_url} HTML length: #{html.size}" if @debug_mode
       return doc
     rescue => e
-      puts "⚠️ 取得失敗: #{e.message}"
+      @logger.warn "⚠️ 取得失敗: #{e.message}"
       return nil
     end
   end
@@ -126,7 +129,7 @@ class SangiinScraper
   def validate_table_structure(h2)
     table = h2.xpath("following-sibling::table").first
     unless table
-      puts "警告: table要素が見つかりませんでした"
+      @logger.warn "警告: table要素が見つかりませんでした"
       return nil
     end
     table
@@ -136,7 +139,7 @@ class SangiinScraper
   def extract_table_headers(table)
     headers = table.css("tr").first&.css("th")&.map { |th| th.text.strip }
     if headers.empty?
-      puts "警告: テーブルヘッダーが見つかりませんでした"
+      @logger.warn "警告: テーブルヘッダーが見つかりませんでした"
       return nil
     end
     headers
@@ -156,7 +159,7 @@ class SangiinScraper
     required_columns = [:session, :title]
     missing_columns = required_columns.select { |col| col_indexes[col].nil? }
     if missing_columns.any?
-      puts "警告: 必須カラムが見つかりません: #{missing_columns.join(', ')}"
+      @logger.warn "警告: 必須カラムが見つかりません: #{missing_columns.join(', ')}"
       return false
     end
     true
@@ -238,7 +241,7 @@ class SangiinScraper
       body_reader = PDF::Reader.new(body_pdf_io)
       body_reader.pages.map(&:text).join("\n\n")
     rescue => e
-      puts "⚠️ PDF読み込み失敗 (#{body_link}): #{e.message}" if @debug_mode
+      @logger.warn "⚠️ PDF読み込み失敗 (#{body_link}): #{e.message}" if @debug_mode
       nil
     end
   end
@@ -254,7 +257,7 @@ class SangiinScraper
 
     title_doc = fetch_title_document(title_link)
     unless title_doc
-      puts "⚠️ title_docの取得に失敗しました: #{session}-#{number}-#{title_name}"
+      @logger.warn "⚠️ title_docの取得に失敗しました: #{session}-#{number}-#{title_name}"
       return 
     end
 
@@ -281,7 +284,7 @@ class SangiinScraper
     )
     bill
   rescue => e
-    puts "❌ Bill初期化エラー #{session}-#{number}: #{e.message}"
+    @logger.error "❌ Bill初期化エラー #{session}-#{number}: #{e.message}"
     nil
   end
 
@@ -293,7 +296,7 @@ class SangiinScraper
       title_doc  = Nokogiri::HTML.parse(title_html)
       title_doc
     rescue => e
-      puts "⚠️ 詳細ページ取得失敗 (#{title_link}): #{e.message}"
+      @logger.warn "⚠️ 詳細ページ取得失敗 (#{title_link}): #{e.message}"
       nil
     end
   end
@@ -315,13 +318,13 @@ class SangiinScraper
     if bill.changed?
       begin
         bill.save!
-        puts "✅ Saved: #{bill.session}-#{bill.number}-#{bill.title} (kind: #{bill.kind})"
+        @logger.info "✅ Saved: #{bill.session}-#{bill.number}-#{bill.title} (kind: #{bill.kind})"
       rescue => e
-        puts "❌ Save failed for Bill #{session}-#{number}(kind: #{kind}): #{e.message}"
+        @logger.error "❌ Save failed for Bill #{session}-#{number}(kind: #{kind}): #{e.message}"
         return
       end
     else
-      puts "⏭ Skip: No changes for #{session}-#{number}-#{title_name}(kind: #{kind})"
+      @logger.debug "⏭ Skip: No changes for #{session}-#{number}-#{title_name}(kind: #{kind})"
       #そのまま採決処理を続行
     end
   end
@@ -358,12 +361,12 @@ class SangiinScraper
             support_type: support_type
           )
         end
-      puts "🗳 Vote info saved for #{session}-#{number}-#{title_name}(kind: #{kind})"
+        @logger.info "🗳 Vote info saved for #{session}-#{number}-#{title_name}(kind: #{kind})"
       else
-        puts "🔕 採決リンクがありません: #{session}-#{number}-#{title_name}(kind: #{kind})"
+        @logger.info "🔕 採決リンクがありません: #{session}-#{number}-#{title_name}(kind: #{kind})"
       end
     else
-      puts "🔕 採決情報がありません: #{session}-#{number}-#{title_name}(kind: #{kind})"
+      @logger.info "🔕 採決情報がありません: #{session}-#{number}-#{title_name}(kind: #{kind})"
     end
   end
 
@@ -386,14 +389,14 @@ class SangiinScraper
     begin
       utf8_test = data.force_encoding('UTF-8')
       if utf8_test.valid_encoding?
-        puts "✅ UTF-8として有効 → scrub処理で完了"
-        puts "[SUCCESS] 使用エンコーディング: UTF-8"
+        @logger.debug "✅ UTF-8として有効 → scrub処理で完了"
+        @logger.info "[SUCCESS] 使用エンコーディング: UTF-8"
         return utf8_test.scrub('?')
       else
-        puts "⚠️ UTF-8として無効 → 他のエンコーディングを試行"
+        @logger.warn "⚠️ UTF-8として無効 → 他のエンコーディングを試行"
       end
     rescue => e
-      puts "❌ UTF-8チェック失敗: #{e.message}"
+      @logger.error "❌ UTF-8チェック失敗: #{e.message}"
     end
     
     # Step 2: Shift_JIS
@@ -404,32 +407,32 @@ class SangiinScraper
 
       if sjis_result.valid_encoding?                     
         if replacement_count > 0
-          puts "⚠️ Shift_JIS変換: #{replacement_count}文字を '?' に置換しました"
+          @logger.warn "⚠️ Shift_JIS変換: #{replacement_count}文字を '?' に置換しました"
         else
-          puts "✅ Shift_JISで変換成功: #{sjis_result.length}文字"
+          @logger.info "✅ Shift_JISで変換成功: #{sjis_result.length}文字"
         end
-        puts "[SUCCESS] 使用エンコーディング: Shift_JIS"
+        @logger.info "[SUCCESS] 使用エンコーディング: Shift_JIS"
         return sjis_result.scrub('?')
       end
     rescue => e
-      puts "⚠️ Shift_JIS変換失敗: #{e.class} - #{e.message}"
+      @logger.warn "⚠️ Shift_JIS変換失敗: #{e.class} - #{e.message}"
     end
     
     # Step 3: 他の候補
     fallback_encodings = ['Windows-31J', 'EUC-JP']
     fallback_encodings.each do |encoding|
       begin
-        puts "🔄 #{encoding}変換を試行"
+        @logger.info "🔄 #{encoding}変換を試行"
         test_result = data.encode('UTF-8', encoding, invalid: :replace, undef: :replace, replace: '【REPLACED】')
         replacement_count = test_result.scan('【REPLACED】').length
         encoding_result = data.encode('UTF-8', encoding, invalid: :replace, undef: :replace, replace: '?')
         if encoding_result.valid_encoding? && encoding_result.length > 0
-          puts "✅ #{encoding}で変換成功 (#{encoding_result.length}文字)"
-          puts "[SUCCESS] 使用エンコーディング: #{encoding}"
+          @logger.info "✅ #{encoding}で変換成功 (#{encoding_result.length}文字)"
+          @logger.info "[SUCCESS] 使用エンコーディング: #{encoding}"
           return encoding_result.scrub('?')
         end
       rescue => e
-        puts "❌ #{encoding}変換失敗: #{e.message}"
+        @logger.error "❌ #{encoding}変換失敗: #{e.message}"
       end
     end
 
@@ -438,12 +441,12 @@ class SangiinScraper
     data = clean_incomplete_multibyte_sequences(data)
 
     begin
-      puts "🔄 強制変換（最終手段）"
+      @logger.info "🔄 強制変換（最終手段）"
       result = data.force_encoding('UTF-8').scrub(' ')
-      puts "[SUCCESS] 使用エンコーディング: 強制UTF-8"
+      @logger.info "[SUCCESS] 使用エンコーディング: 強制UTF-8"
       return result
     rescue => e
-      puts "❌ 強制変換も失敗: #{e.message}"
+      @logger.error "❌ 強制変換も失敗: #{e.message}"
       return ""
     end
   end
