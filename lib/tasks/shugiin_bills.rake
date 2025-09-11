@@ -2,6 +2,7 @@ require "open-uri"
 require "nokogiri"
 require "latest_session"
 require "net/http"   # fetch_raw_bytes 用
+require "logger"
 
 namespace :scrape do
   desc "Scrape Shugiin bills (衆法・参法・閣法)"
@@ -12,6 +13,8 @@ end
 
 class ShugiinScraper
   def initialize
+    @logger = Logger.new($stdout)
+    @logger.level = ENV['DEBUG'] == "true" ? Logger::DEBUG : Logger::INFO
     @debug_mode = ENV['DEBUG'] == "true"
     @politician_cache = Politician.all.index_by(&:normalized_name)
     range = setup_target_sessions
@@ -66,24 +69,24 @@ class ShugiinScraper
   # メイン処理
   def execute
     start_time = Time.current
-    puts "[#{Time.current.strftime('%H:%M:%S')}] 衆議院スクレイピング開始"
+    @logger.info "[#{Time.current.strftime('%H:%M:%S')}] 衆議院スクレイピング開始"
     
     begin
       target_sessions = setup_target_sessions
-        return unless target_sessions
-      puts ("対象国会: 第#{target_sessions.first}回〜第#{target_sessions.last}回")
+      return unless target_sessions
+      @logger.info "対象国会: 第#{target_sessions.first}回〜第#{target_sessions.last}回"
 
       @sessions_map.each do |table_name, sessions|
         sessions.each do |session_number|
           process_session(table_name, session_number)
-          puts "完了: #{table_name} for 第#{session_number}回国会"
+          @logger.info "完了: #{table_name} for 第#{session_number}回国会"
         end
       end
       duration = (Time.current - start_time).round(2)
-      puts "[#{Time.current.strftime('%H:%M:%S')}] スクレイピング完了 (#{duration}秒)"
+      @logger.info "[#{Time.current.strftime('%H:%M:%S')}] スクレイピング完了 (#{duration}秒)"
     rescue => e
-      puts "FATAL ERROR: #{e.message}"
-      puts e.backtrace.first(5).join("\n") if @debug_mode
+      @logger.fatal "FATAL ERROR: #{e.message}"
+      @logger.debug e.backtrace.first(5).join("\n") if @debug_mode
       exit 1
     end
   end
@@ -102,10 +105,10 @@ class ShugiinScraper
   def fetch_session_document(session_url)
     html = URI.open(session_url).read
     doc = Nokogiri::HTML(html)
-    puts "[DEBUG] #{session_url} HTML length: #{html.size}" if @debug_mode
+    @logger.debug "[DEBUG] #{session_url} HTML length: #{html.size}" if @debug_mode
     return doc
-    rescue => e
-    puts "⚠️ 取得失敗: #{e.message}"
+  rescue => e
+    @logger.warn "⚠️ 取得失敗: #{e.message}"
     return nil
   end
 
@@ -128,14 +131,13 @@ class ShugiinScraper
 
     # tableの存在チェック（安全呼び出し演算子使用）
     unless target_table
-      puts "警告: テーブル '#{table_name}' が見つかりませんでした"
+      @logger.warn "警告: テーブル '#{table_name}' が見つかりませんでした"
       return
     end
 
-    # ヘッダーの取得（安全呼び出し演算子使用）
     headers = target_table.css("th")&.map { |th| th&.text&.strip } || []
     if headers.empty?
-      puts "警告: テーブルヘッダーが見つかりませんでした"
+      @logger.warn "警告: テーブルヘッダーが見つかりませんでした"
       return
     end
     col_indexes = build_column_indexes(headers)
@@ -162,7 +164,7 @@ class ShugiinScraper
       # tdの存在チェック
       tds = tr&.css("td") || []
       next if tds.empty? 
-      puts "議案カラム処理開始: 議案名= #{tds[col_indexes[:title]]&.text&.strip}, (回次: #{tds[col_indexes[:session]]&.text&.strip}, テーブル名: #{table_name})"
+      @logger.debug "議案カラム処理開始: 議案名= #{tds[col_indexes[:title]]&.text&.strip}, (回次: #{tds[col_indexes[:session]]&.text&.strip}, テーブル名: #{table_name})"
 
       # 各セルのデータを安全に取得
       session = col_indexes[:session] && tds[col_indexes[:session]] ? 
@@ -194,7 +196,7 @@ class ShugiinScraper
       required_columns = [:session, :title]
       missing_columns = required_columns.select { |col| col_indexes[col].nil? }
       if missing_columns.any?
-        puts "警告: 必須カラムが見つかりません: #{missing_columns.join(', ')}"
+        @logger.warn "警告: 必須カラムが見つかりません: #{missing_columns.join(', ')}"
         next
       end
 
@@ -222,20 +224,17 @@ class ShugiinScraper
       bill.assign_attributes(attributes)
       # 変更がある場合のみ保存
       if bill.changed?
-        
         begin
           bill.save!
-          # bill_saved = true
-          puts "✅ Saved: #{session}-#{number}: #{title} [#{kind}]"
+          @logger.info "✅ Saved: #{session}-#{number}: #{title} [#{kind}]"
         rescue => e
-          # bill_saved = true
-          puts "❌ Save failed for Bill #{session}-#{number}-#{title}(kind: #{kind}): #{e.message}"
+          @logger.error "❌ Save failed for Bill #{session}-#{number}-#{title}(kind: #{kind}): #{e.message}"
+          # エラーの場合は次の処理へ
           next
-           # エラーの場合は次の処理へ
         end
-      else  
-        puts "⏭ Skip: No changes for #{session}-#{number}-#{title}(kind: #{kind})"
-         # 変更がない場合は次の処理へ
+      else
+        # 変更のない場合は次の処理へ  
+        @logger.debug "⏭ Skip: No changes for #{session}-#{number}-#{title}(kind: #{kind})"
       end
 
       # 関連データの保存（安全に実行）
@@ -248,9 +247,9 @@ class ShugiinScraper
         disagree_groups = progress_data[:disagree_groups] || []
         save_bill_supports(bill, proposer_groups, proposer_names, agreeer_names, agree_groups, disagree_groups)
         
-      puts "[#{kind}] 🔗 関連データ保存完了: #{session}-#{number}"
+        @logger.info "[#{kind}] 🔗 関連データ保存完了: #{session}-#{number}"
       rescue => e
-        puts "❌ 関連データ保存エラー: #{e.message} - #{session}-#{number}: #{title}"
+        @logger.error "❌ 関連データ保存エラー: #{e.message} - #{session}-#{number}: #{title}"
       end
     # end
     end
@@ -265,7 +264,7 @@ class ShugiinScraper
       kind: kind&.strip
     )
   rescue => e
-    puts "❌ Bill初期化エラー #{session}-#{number}: #{e.message}"
+    @logger.error "❌ Bill初期化エラー #{session}-#{number}: #{e.message}"
     nil
   end
 
@@ -281,7 +280,7 @@ class ShugiinScraper
 
       progress_data
     rescue => e
-      puts "❌エラー: progress_data取得に失敗しました: #{e.message}"
+      @logger.error "❌エラー: progress_data取得に失敗しました: #{e.message}"
       default_progress_data(table_name)
     end
   end
@@ -291,24 +290,23 @@ class ShugiinScraper
     progress_url = URI.join(session_url, href).to_s
 
     begin
-      puts "[DEBUG] URL取得開始: #{progress_url}"
+      @logger.debug "[DEBUG] URL取得開始: #{progress_url}"
       raw_data = fetch_raw_bytes(progress_url)
-      puts "[DEBUG] URL取得完了: #{raw_data.bytesize} bytes"
-      puts "📊 生データサイズ: #{raw_data.length}バイト"
+      @logger.debug "[DEBUG] URL取得完了: #{raw_data.bytesize} bytes"
+      @logger.debug "📊 生データサイズ: #{raw_data.length}バイト"
     
     # デバッグ: 問題バイト検出
     invalid_bytes = raw_data.bytes.select { |byte| byte > 127 && !raw_data.force_encoding('UTF-8').valid_encoding? }
     if invalid_bytes.any?
-      puts "⚠️ 無効バイト検出: #{invalid_bytes.size}個"
+      @logger.warn "⚠️ 無効バイト検出: #{invalid_bytes.size}個"
     end
 
      # 🔧 多段階エンコーディング処理
     progress_html = safe_encode_to_utf8(raw_data)
-      puts "✅ 変換完了: #{progress_html.length}文字"
-      
+      @logger.debug "✅ 変換完了: #{progress_html.length}文字"
     rescue => e
-      puts "❌ progressデータ取得エラー: #{e.message}"
-      puts e.backtrace.join("\n")
+      @logger.error "❌ progressデータ取得エラー: #{e.message}"
+      @logger.debug e.backtrace.join("\n")
       return default_progress_data(table_name)
     end
 
@@ -316,7 +314,7 @@ class ShugiinScraper
     tables = progress_doc.css("table")
 
     # デバッグ出力を追加
-    puts "🔍 テーブル数: #{tables.length}"
+    @logger.debug "🔍 テーブル数: #{tables.length}"
 
     data = {}
     tables[0]&.css("tr")&.each do |row|
@@ -328,7 +326,7 @@ class ShugiinScraper
 
     # 重要なデバッグ出力
     # puts "📋 data内容: #{data.keys}"
-    puts "📝 議案提出者: '#{data.fetch("議案提出者", "")}'"
+    @logger.debug "📝 議案提出者: '#{data.fetch("議案提出者", "")}'"
 
     data2 = {}
     if tables[1]&.css("tr")
@@ -339,8 +337,8 @@ class ShugiinScraper
       end
     end
 
-    puts "📋 data2内容: #{data2.keys}"
-    puts "📝 議案提出者一覧: '#{data2["議案提出者一覧"]}'"
+    @logger.debug "📋 data2内容: #{data2.keys}"
+    @logger.debug "📝 議案提出者一覧: '#{data2["議案提出者一覧"]}'"
 
     progress_data = {
       kind: data.fetch("議案種類", "").strip&.presence || table_name,
@@ -372,13 +370,10 @@ class ShugiinScraper
   end
 
   def extract_names_from_text(text)
-
-    # デバッグ情報を追加
-    puts "🔍 extract_names_from_text呼び出し: '#{text}'"
-    
+    @logger.debug "🔍 extract_names_from_text呼び出し: '#{text}'"
     # 早期リターンでnilや空文字をガード
     if text.blank?
-      puts "⚠️ テキストが空です"
+      @logger.warn "⚠️ テキストが空です"
       return []
     end
 
@@ -396,7 +391,7 @@ class ShugiinScraper
       # 配列の各要素のスペースも除去
       names.map { |n| n.gsub(/[[:space:]]/, "") }
     rescue => e
-      puts "❌ 名前抽出エラー: #{e.message} - 入力: #{text.inspect}"
+      @logger.error "❌ 名前抽出エラー: #{e.message} - 入力: #{text.inspect}"
       []
     end
   end
@@ -405,7 +400,7 @@ class ShugiinScraper
 
     # 入力値の安全性チェック
     unless session_url&.present? && body_href&.present?
-      puts "⚠️ 無効な body URL情報: session_url=#{session_url}, body_href=#{body_href}"
+      @logger.warn "⚠️ 無効な body URL情報: session_url=#{session_url}, body_href=#{body_href}"
       return default_body_data
     end
 
@@ -416,12 +411,12 @@ class ShugiinScraper
       body_doc = Nokogiri::HTML(body_html)
       
       unless body_doc
-        puts "❌ HTMLパースに失敗: #{body_url}"
+        @logger.error "❌ HTMLパースに失敗: #{body_url}"
         return default_body_data
       end
 
     rescue => e
-      puts "❌ Body HTML取得エラー: #{body_url} (#{e.message})"
+      @logger.error "❌ Body HTML取得エラー: #{body_url} (#{e.message})"
       return default_body_data
     end
 
@@ -453,10 +448,9 @@ class ShugiinScraper
 
   # 要綱データを安全に抽出
   def extract_summary_data(body_doc, body_url)
-    
     youkou_link = body_doc&.css("a")&.find { |a| a&.text&.include?("要綱") }  
     unless youkou_link&.[]("href")
-      puts "要綱リンクなし"
+      @logger.info "要綱リンクなし"
       return { link: nil, text: nil }
     end
 
@@ -466,17 +460,17 @@ class ShugiinScraper
       h2 = summary_doc&.at_css("h2#TopContents")
       
       unless h2
-        puts "⚠️ 要綱のh2要素が見つかりません"
+        @logger.warn "⚠️ 要綱のh2要素が見つかりません"
         return { link: summary_link, text: nil }
       end
 
       summary_text = extract_text_content(h2)
-      puts "✅ 要綱テキスト抽出完了: #{summary_text&.length || 0}文字" 
+      @logger.info "✅ 要綱テキスト抽出完了: #{summary_text&.length || 0}文字" 
       { link: summary_link, text: summary_text }
       
     rescue => e
-      puts "❌ 要綱データ取得エラー: #{e.message}"
-      puts e.backtrace.join("\n")
+      @logger.error "❌ 要綱データ取得エラー: #{e.message}"
+      @logger.debug e.backtrace.join("\n")
       { link: nil, text: nil }
     end
   end
@@ -485,13 +479,13 @@ class ShugiinScraper
   def extract_body_data(body_doc, body_url)
     houan_link = body_doc&.css("a")&.find { |a| a&.text&.include?("提出時法律案") } 
     unless houan_link&.[]("href")
-      puts "法案本文リンクなし"
+      @logger.info "法案本文リンクなし"
       return { link: nil, text: nil }
     end
 
     body_link = URI.join(body_url, houan_link["href"]).to_s
     unless body_link
-      puts "法案本文リンクなし"
+      @logger.warn "法案本文リンクなし"
       return { link: nil, text: nil }
     end
 
@@ -499,7 +493,7 @@ class ShugiinScraper
     h2 = houan_body_doc&.at_css("h2#TopContents")
   
     unless h2
-      puts "⚠️ 法案本文のh2要素が見つかりません"
+      @logger.warn "⚠️ 法案本文のh2要素が見つかりません"
       return { link: body_link, text: nil }
     end
 
@@ -526,14 +520,11 @@ class ShugiinScraper
 
 
   def save_bill_supports(bill, proposer_groups, proposer_names, agreeer_names, agree_groups, disagree_groups)
-    puts "💾 BillSupports保存開始: Bill ID=#{bill&.id}"
-    
-    # 入力値の安全性チェック
+    @logger.info "💾 BillSupports保存開始: Bill ID=#{bill&.id}"
     unless bill&.persisted?
-      puts "❌ 無効なBillオブジェクト: #{bill.inspect}"
+      @logger.error "❌ 無効なBillオブジェクト: #{bill.inspect}"
       return false
     end
-
     begin
       # 各種サポートデータの保存実行
       save_group_proposals(bill, proposer_groups)        # 提出会派
@@ -542,12 +533,11 @@ class ShugiinScraper
       save_group_agreements(bill, agree_groups)      # 審議時賛成会派
       save_group_disagreements(bill, disagree_groups) # 審議時反対会派
       
-      puts "✅ BillSupports保存完了: Bill ID=#{bill.id}"
+      @logger.info "✅ BillSupports保存完了: Bill ID=#{bill.id}"
       true
-      
     rescue => e
-      puts "❌ BillSupports保存エラー: #{e.message}"
-      puts "📊 エラー詳細: Bill=#{bill&.id}, Groups=#{proposer_groups&.length}, Proposers=#{proposer_names&.length}"
+      @logger.error "❌ BillSupports保存エラー: #{e.message}"
+      @logger.debug "📊 エラー詳細: Bill=#{bill&.id}, Groups=#{proposer_groups&.length}, Proposers=#{proposer_names&.length}"
       false
     end
   end
@@ -565,13 +555,13 @@ class ShugiinScraper
       begin
         group = find_or_create_group(g_name)
         unless group
-          puts "  ⚠️ [#{index + 1}/#{proposer_groups.length}] 提出会派未発見: #{g_name}"
+          @logger.warn "  ⚠️ [#{index + 1}/#{proposer_groups.length}] 提出会派未発見: #{g_name}"
           next
         end
         create_bill_support(bill, group, "propose", "提出会派")
-        # puts "  ✅ [#{index + 1}/#{proposer_groups.length}] 提出会派: #{g_name}" 
+        # @logger.info "  ✅ [#{index + 1}/#{proposer_groups.length}] 提出会派: #{g_name}" 
       rescue => e
-        puts "  ❌ [#{index + 1}/#{proposer_groups.length}] 提出会派エラー: #{g_name} (#{e.message})"
+        @logger.error "  ❌ [#{index + 1}/#{proposer_groups.length}] 提出会派エラー: #{g_name} (#{e.message})"
       end
     end
   end
@@ -586,7 +576,7 @@ class ShugiinScraper
         politician = find_politician_by_name(p_name)
         if politician
           create_bill_support(bill, politician, "proposer_names", "提出者")
-          # puts "  ✅ [#{index + 1}/#{proposer_names.length}] 提出者: #{p_name}"
+          # @logger.info "  ✅ [#{index + 1}/#{proposer_names.length}] 提出者: #{p_name}"
         else 
           # politician が見つからなくても raw_politician で保存
           BillSupport.find_or_create_by!(
@@ -594,10 +584,10 @@ class ShugiinScraper
             raw_politician: p_name,  
             support_type: "proposer_names"
           )
-          puts "[#{index + 1}/#{proposer_names.length}] 提出者: #{p_name}"
+          # @logger.info "[#{index + 1}/#{proposer_names.length}] 提出者: #{p_name}"
         end
       rescue => e
-        puts "  ❌ [#{index + 1}/#{proposer_names.length}] 提出者エラー: #{p_name} (#{e.message})"
+        @logger.error "  ❌ [#{index + 1}/#{proposer_names.length}] 提出者エラー: #{p_name} (#{e.message})"
       end
     end
   end
@@ -611,13 +601,13 @@ class ShugiinScraper
       begin
         politician = find_politician_by_name(a_name) 
         unless politician
-          puts "  ⚠️ [#{index + 1}/#{agreeer_names.length}] 賛成者未発見: #{a_name}"
+          @logger.warn "  ⚠️ [#{index + 1}/#{agreeer_names.length}] 賛成者未発見: #{a_name}"
           next
         end 
         create_bill_support(bill, politician, "propose_agree", "賛成者")
-        # puts "  ✅ [#{index + 1}/#{agreeer_names.length}] 賛成者: #{a_name}"
+        # @logger.info "  ✅ [#{index + 1}/#{agreeer_names.length}] 賛成者: #{a_name}"
       rescue => e
-        puts "  ❌ [#{index + 1}/#{agreeer_names.length}] 賛成者エラー: #{a_name} (#{e.message})"
+        @logger.error "  ❌ [#{index + 1}/#{agreeer_names.length}] 賛成者エラー: #{a_name} (#{e.message})"
       end
     end
   end
@@ -632,9 +622,9 @@ class ShugiinScraper
         group = find_or_create_group(g_name)
         next unless group
         create_bill_support(bill, group, "agree", "審議時賛成会派")
-        # puts "  ✅ [#{index + 1}/#{agree_groups.length}] 審議時賛成会派: #{g_name}"
+        # @logger.info "  ✅ [#{index + 1}/#{agree_groups.length}] 審議時賛成会派: #{g_name}"
       rescue => e
-        puts "  ❌ [#{index + 1}/#{agree_groups.length}] 審議時賛成会派エラー: #{g_name} (#{e.message})"
+        @logger.error "  ❌ [#{index + 1}/#{agree_groups.length}] 審議時賛成会派エラー: #{g_name} (#{e.message})"
       end
     end
   end
@@ -649,9 +639,9 @@ class ShugiinScraper
         group = find_or_create_group(g_name)
         next unless group
         create_bill_support(bill, group, "disagree", "審議時反対会派")
-        # puts "  ✅ [#{index + 1}/#{disagree_groups.length}] 審議時反対会派: #{g_name}"
+        # @logger.info "  ✅ [#{index + 1}/#{disagree_groups.length}] 審議時反対会派: #{g_name}"
       rescue => e
-        puts "  ❌ [#{index + 1}/#{disagree_groups.length}] 審議時反対会派エラー: #{g_name} (#{e.message})"
+        @logger.error "  ❌ [#{index + 1}/#{disagree_groups.length}] 審議時反対会派エラー: #{g_name} (#{e.message})"
       end
     end
   end
@@ -667,7 +657,7 @@ class ShugiinScraper
     politician = @politician_cache[normalized_name]
     
     unless politician
-      puts "⚠️ 政治家未発見: #{name} "
+      @logger.warn "⚠️ 政治家未発見: #{name} "
     end
     
     politician
@@ -692,162 +682,147 @@ class ShugiinScraper
     end
     group
   rescue => e
-    puts "❌ 会派作成エラー: #{name} (#{e.message})"
+    @logger.error "❌ 会派作成エラー: #{name} (#{e.message})"
     nil
   end
 
   # BillSupportレコードを作成するメソッド
   def create_bill_support(bill, supportable, support_type, description)
-    
     begin
         BillSupport.find_or_create_by!(
           bill: bill, 
           supportable: supportable, 
           support_type: support_type
         )
-      # puts "✅ #{description}保存完了: #{supportable.name}"
+      @logger.info "✅ #{description}保存完了: #{supportable.name}"
       
     rescue ActiveRecord::RecordInvalid => e
-      puts "❌ #{description}保存エラー: #{supportable&.name} (#{e.message})"
+      @logger.error "❌ #{description}保存エラー: #{supportable&.name} (#{e.message})"
       raise e
     end
   end
-end
 
-def fetch_raw_bytes(url)
-  uri = URI.parse(url)
-  Net::HTTP.get(uri) # これは必ず ASCII-8BIT の String で返る
-end
-
-def fetch_html(url)
-  raw_data = fetch_raw_bytes(url)
-  safe_encode_to_utf8(raw_data)
-end
-
-def safe_encode_to_utf8(raw_data)
-  return "" if raw_data.nil? || raw_data.empty?
-
-  data = raw_data.dup.force_encoding('ASCII-8BIT')
-
-  # 🚀 Step 1: UTF-8チェック（最優先・最高速）
-  begin
-    utf8_test = data.force_encoding('UTF-8')
-    if utf8_test.valid_encoding?
-      puts "✅ UTF-8として有効 → scrub処理で完了"
-      puts "[SUCCESS] 使用エンコーディング: UTF-8"
-      return utf8_test.scrub('?')
-    else
-      puts "⚠️ UTF-8として無効 → 他のエンコーディングを試行"
-    end
-  rescue => e
-    puts "❌ UTF-8チェック失敗: #{e.message}"
+  def fetch_raw_bytes(url)
+    uri = URI.parse(url)
+    Net::HTTP.get(uri) # これは必ず ASCII-8BIT の String で返る
   end
-  
-  # Step 2: Shift_JISとして試行
-  begin
-    test_result = data.encode('UTF-8', 'Shift_JIS', 
-                          invalid: :replace, 
-                          undef: :replace, 
-                          replace: '【REPLACED】')
 
-    replacement_count = test_result.scan('【REPLACED】').length
+  def fetch_html(url)
+    raw_data = fetch_raw_bytes(url)
+    safe_encode_to_utf8(raw_data)
+  end
+
+  def safe_encode_to_utf8(raw_data)
+    return "" if raw_data.nil? || raw_data.empty?
+
+    data = raw_data.dup.force_encoding('ASCII-8BIT')
     
-    # 実際の変換（? で置換）
-    sjis_result = data.encode('UTF-8', 'Shift_JIS', 
-                             invalid: :replace, 
-                             undef: :replace, 
-                             replace: '?')
-
-    if sjis_result.valid_encoding?                     
-      if replacement_count > 0
-        puts "⚠️ Shift_JIS変換:  #{replacement_count}文字を '?' に置換しました"
-      else
-        puts "✅ Shift_JISで変換成功: #{sjis_result.length}文字"
-      end
-      puts "[SUCCESS] 使用エンコーディング: Shift_JIS"
-      return sjis_result.scrub('?')
-    else
-      puts "⚠️ Shift_JIS変換後も無効"
-    end
-  rescue => e
-     # 呼び出し元に伝播しない
-    puts "⚠️ Shift_JIS変換失敗: #{e.class} - #{e.message}"
-  end
-  
-  # 🔄 Step 3: 他のエンコーディング試行（UTF-8が無効な場合のみ）
-  fallback_encodings = ['Windows-31J', 'EUC-JP']
-  fallback_encodings.each do |encoding|
+    # 🚀 Step 1: UTF-8チェック（最優先・最高速）
     begin
-      puts "🔄 #{encoding}変換を試行"
-      test_result = data.encode('UTF-8', encoding, 
-                                 invalid: :replace, 
-                                 undef: :replace, 
-                                 replace: '【REPLACED】')
-      
-      replacement_count = test_result.scan('【REPLACED】').length
-    
-      # 実際の変換（? で置換）
-      encoding_result = data.encode('UTF-8', encoding, 
-                              invalid: :replace, 
-                              undef: :replace, 
-                              replace: '?')
-      
-      # 結果の妥当性チェック
-      if encoding_result.valid_encoding? && encoding_result.length > 0
-        if replacement_count > 0
-          puts "⚠️ #{encoding}変換:  #{replacement_count}を '?' に置換しました"
-        else
-          puts "✅ #{encoding}で変換成功: #{encoding_result.length}文字"
-        end
-        puts "[SUCCESS] 使用エンコーディング: #{encoding}"
-        return encoding_result.scrub('?')
+      utf8_test = data.force_encoding('UTF-8')
+      if utf8_test.valid_encoding?
+        @logger.debug "✅ UTF-8として有効 → scrub処理で完了"
+        @logger.info "[SUCCESS] 使用エンコーディング: UTF-8"
+        return utf8_test.scrub('?')
       else
-        puts "⚠️ #{encoding}: 結果が不十分 (#{result.length}文字)"
+        @logger.warn "⚠️ UTF-8として無効 → 他のエンコーディングを試行"
       end
     rescue => e
-      puts "❌ #{encoding}変換失敗: #{e.message}"
+      @logger.error "❌ UTF-8チェック失敗: #{e.message}"
+    end
+    
+    # Step 2: Shift_JISとして試行
+    begin
+      test_result = data.encode('UTF-8', 'Shift_JIS', invalid: :replace, undef: :replace, replace: '【REPLACED】')
+      replacement_count = test_result.scan('【REPLACED】').length
+      sjis_result = data.encode('UTF-8', 'Shift_JIS', invalid: :replace, undef: :replace, replace: '?')
+      if sjis_result.valid_encoding?                     
+        if replacement_count > 0
+          @logger.warn "⚠️ Shift_JIS変換:  #{replacement_count}文字を '?' に置換しました"
+        else
+          @logger.info "✅ Shift_JISで変換成功: #{sjis_result.length}文字"
+        end
+        @logger.info "[SUCCESS] 使用エンコーディング: Shift_JIS"
+        return sjis_result.scrub('?')
+      else
+        @logger.warn "⚠️ Shift_JIS変換後も無効"
+      end
+    rescue => e
+      # 呼び出し元に伝播しない
+      @logger.warn "⚠️ Shift_JIS変換失敗: #{e.class} - #{e.message}"
+    end
+    
+    # 🔄 Step 3: 他のエンコーディング試行（UTF-8が無効な場合のみ）
+    fallback_encodings = ['Windows-31J', 'EUC-JP']
+    fallback_encodings.each do |encoding|
+      begin
+        logger.info "🔄 #{encoding}変換を試行"
+        test_result = data.encode('UTF-8', encoding, invalid: :replace, undef: :replace, replace: '【REPLACED】')
+        replacement_count = test_result.scan('【REPLACED】').length
+      
+        # 実際の変換（? で置換）
+        encoding_result = data.encode('UTF-8', encoding, 
+                                invalid: :replace, 
+                                undef: :replace, 
+                                replace: '?')
+        
+        # 結果の妥当性チェック
+        if encoding_result.valid_encoding? && encoding_result.length > 0
+          if replacement_count > 0
+            @logger.warn "⚠️ #{encoding}変換:  #{replacement_count}を '?' に置換しました"
+          else
+            @logger.info "✅ #{encoding}で変換成功: #{encoding_result.length}文字"
+          end
+          @logger.info "[SUCCESS] 使用エンコーディング: #{encoding}"
+          return encoding_result.scrub('?')
+        else
+          @logger.warn "⚠️ #{encoding}: 結果が不十分 (#{encoding_result.length}文字)"
+        end
+      rescue => e
+        @logger.error "❌ #{encoding}変換失敗: #{e.message}"
+      end
+    end
+
+    # 🎯 包括的パターンクリーニング（最優先）
+    data = comprehensive_pattern_clean(data)
+    
+    # 残りのクリーニング
+    data = clean_incomplete_multibyte_sequences(data)
+
+    # 🆘 Step 4: 最終手段（すべて失敗した場合）
+    begin
+      @logger.info "🔄 強制変換（最終手段）"
+      result = data.force_encoding('UTF-8').scrub(' ')
+      @logger.info "[SUCCESS] 使用エンコーディング: 強制UTF-8"
+      return result
+    rescue => e
+      @logger.error "❌ 強制変換も失敗: #{e.message}"
+      return ""
     end
   end
 
-  # 🎯 包括的パターンクリーニング（最優先）
-  data = comprehensive_pattern_clean(data)
-  
-  # 残りのクリーニング
-  data = clean_incomplete_multibyte_sequences(data)
-
-  # 🆘 Step 4: 最終手段（すべて失敗した場合）
-  begin
-    puts "🔄 強制変換（最終手段）"
-    result = data.force_encoding('UTF-8').scrub(' ')
-    puts "[SUCCESS] 使用エンコーディング: 強制UTF-8"
-    return result
-  rescue => e
-    puts "❌ 強制変換も失敗: #{e.message}"
-    return ""
+  # 補助メソッド：不完全なマルチバイト文字列をクリーンアップ
+  def clean_incomplete_multibyte_sequences(data)
+    # 文字境界で切り捨てられた可能性のある末尾バイトを除去
+    while data.length > 0 && data[-1].ord > 127
+      data = data[0..-2]
+    end
+    data
   end
-end
 
-# 補助メソッド：不完全なマルチバイト文字列をクリーンアップ
-def clean_incomplete_multibyte_sequences(data)
-  # 文字境界で切り捨てられた可能性のある末尾バイトを除去
-  while data.length > 0 && data[-1].ord > 127
-    data = data[0..-2]
+  def comprehensive_pattern_clean(data)
+    # 🚀 無効パターンを一括処理
+    invalid_patterns = [
+      /[\x80-\x9F][\x20-\x7F]/n,           # \x87@ 系
+      /[\x80-\x9F][\x80-\x9F]/n,           # 連続無効バイト
+      /[\xFB-\xFF]./n,                     # \xFB\xFC 系（重要！）
+      /[\x00-\x08\x0B\x0C\x0E-\x1F]/n     # 制御文字
+    ]
+    
+    invalid_patterns.each do |pattern|
+      data.gsub!(pattern, ' ')
+    end
+    
+    data
   end
-  data
-end
-
-def comprehensive_pattern_clean(data)
-  # 🚀 無効パターンを一括処理
-  invalid_patterns = [
-    /[\x80-\x9F][\x20-\x7F]/n,           # \x87@ 系
-    /[\x80-\x9F][\x80-\x9F]/n,           # 連続無効バイト
-    /[\xFB-\xFF]./n,                     # \xFB\xFC 系（重要！）
-    /[\x00-\x08\x0B\x0C\x0E-\x1F]/n     # 制御文字
-  ]
-  
-  invalid_patterns.each do |pattern|
-    data.gsub!(pattern, ' ')
-  end
-  
-  data
 end
