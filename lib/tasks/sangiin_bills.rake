@@ -3,6 +3,9 @@ require "nokogiri"
 require "pdf-reader"
 require "latest_session"
 require "logger"
+require "net/http"
+require "date"
+require 'wareki'
 
 namespace :scrape do
   desc "Scrape Sangiin bills (参法・衆法・閣法)"
@@ -292,7 +295,7 @@ class SangiinScraper
   def fetch_title_document(title_link)
     begin
       # 詳細ページ解析          
-      title_html = URI.open(title_link)
+      title_html = fetch_html(title_link)
       title_doc  = Nokogiri::HTML.parse(title_html)
       title_doc
     rescue => e
@@ -333,11 +336,13 @@ class SangiinScraper
   def process_vote_results(title_doc, title_link, bill, session, number, title_name, kind)
     #採決結果を取得・保存
     vote_row = title_doc.at_css("table.list_c tr:has(th:contains('採決方法'))")
+    vote_status = title_doc.at_css("table.list_c tr:has(th:contains('採決態様'))")
+    vote_date = title_doc.at_css("table.list_c tr:has(th:contains('議決日')) td")&.text&.strip
     if vote_row
       vote_link_href = vote_row.at_css("a")&.[]("href")
       if vote_link_href
         vote_link = URI.join(title_link, vote_link_href).to_s
-        vote_html = URI.open(vote_link)
+        vote_html = fetch_html(vote_link)
         vote_doc  = Nokogiri::HTML(vote_html)
         vote_doc.css("li.giin").each do |li|
 
@@ -364,6 +369,48 @@ class SangiinScraper
         @logger.info "🗳 Vote info saved for #{session}-#{number}-#{title_name}(kind: #{kind})"
       else
         @logger.info "🔕 採決リンクがありません: #{session}-#{number}-#{title_name}(kind: #{kind})"
+        if vote_status
+          vote_status_text = vote_status.at_css("td")&.text&.strip
+          @logger.info " 採決態様: #{vote_status_text}" if vote_status_text
+          # 全会一致なら全議員を賛成に登録
+          if vote_status_text && vote_status_text == "全会一致"
+            support_type = "agree"
+            begin
+              # vote_dateをDate型に変換
+              vote_date_obj = vote_date.present? ? Wareki::Date.parse(vote_date).to_date : nil
+
+              # vote_date_objがnilなら処理を中断
+              unless vote_date_obj
+                @logger.warn "⚠️ vote_dateが不正なため全会一致の賛成登録をスキップします"
+                return
+              end
+              # トランザクション内で処理
+              ActiveRecord::Base.transaction do
+                Politician.where(name_of_house: "参議院").find_each do |politician|
+                  # winning_yearが存在し、vote_dateがその任期内か判定
+                  if vote_date_obj && politician.winning_year.present?
+                    start_year = politician.winning_year.to_i
+                    end_year = start_year + 6
+                    if vote_date_obj.year >= start_year && vote_date_obj.year < end_year
+                      BillSupport.find_or_create_by(
+                        bill: bill,
+                        supportable: politician,
+                        support_type: support_type
+                      )
+                    end
+                  end
+                end
+              end
+              @logger.info "全会一致として該当任期の参議院議員のみ賛成に登録しました" 
+            rescue => e
+              @logger.error "全会一致登録エラー: #{e.message}"
+            end
+          else
+            @logger.info "採決態様情報がありますが、全会一致ではありません"
+          end
+        else
+          @logger.info "採決態様情報もありません"
+        end
       end
     else
       @logger.info "🔕 採決情報がありません: #{session}-#{number}-#{title_name}(kind: #{kind})"
